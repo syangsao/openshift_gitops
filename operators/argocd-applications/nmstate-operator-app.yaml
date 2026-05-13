@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/YOUR_USERNAME/openshift_gitops.git'
+    repoURL: 'https://github.com/syangsao/openshift_gitops.git'
     targetRevision: main
     path: operators/nmstate
   destination:
