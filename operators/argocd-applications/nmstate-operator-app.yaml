@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nmstate-operator
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/YOUR_USERNAME/openshift_gitops.git'
+    targetRevision: main
+    path: operators/nmstate
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: openshift-nmstate
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
