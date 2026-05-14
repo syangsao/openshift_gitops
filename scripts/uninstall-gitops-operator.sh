@@ -55,10 +55,11 @@ The script will:
   1. Validate prerequisites (oc CLI, login, cluster-admin role)
   2. Delete ArgoCD instances in all namespaces
   3. Delete the Operator Subscription
-  4. Wait for operator pods to terminate
-  5. Delete the operator and gitops namespaces (removes CSV, OperatorGroup)
-  6. Wait for namespaces to be fully deleted
-  7. Verify cleanup (namespaces, ArgoCD instances, CRDs)
+  4. Scale operator deployment to 0 (forces pod termination)
+  5. Wait for operator pods to terminate
+  6. Delete the operator and gitops namespaces (removes CSV, OperatorGroup)
+  7. Wait for namespaces to be fully deleted
+  8. Verify cleanup (namespaces, ArgoCD instances, CRDs)
 
 WARNING: This operation is irreversible. All ArgoCD instances and operator
 resources will be permanently deleted.
@@ -261,6 +262,32 @@ delete_subscription() {
     done
 }
 
+force_stop_operator() {
+    check "Stopping operator deployment..."
+    
+    # Scale the deployment to 0 so operator pods terminate immediately.
+    # OLM does not delete the deployment promptly after subscription removal,
+    # so we do it manually to avoid waiting 300s.
+    local deploy
+    deploy=$(oc get deployment -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null | head -1 || echo "")
+    
+    if [ -z "$deploy" ]; then
+        info "No deployment found in '$OPERATOR_NAMESPACE'. Skipping."
+        return 0
+    fi
+    
+    local name
+    name=$(echo "$deploy" | sed 's|deployment.apps/||')
+    dry "Scaling deployment '$name' to 0 replicas..."
+    if [ "$DRY_RUN" != true ]; then
+        if oc scale deployment "$name" --replicas=0 -n "$OPERATOR_NAMESPACE" 2>/dev/null; then
+            info "Scaled deployment '$name' to 0 replicas."
+        else
+            warn "Failed to scale deployment '$name'. Pods may take longer to terminate."
+        fi
+    fi
+}
+
 wait_for_pods_terminated() {
     local namespace="$1"
     check "Waiting for pods in '${namespace}' to terminate (timeout: ${POD_TIMEOUT}s)..."
@@ -450,7 +477,11 @@ main() {
     delete_subscription
     echo ""
     
-    # Step 3: Wait for pods to terminate
+    # Step 3: Scale operator deployment to 0 so pods terminate immediately
+    force_stop_operator
+    echo ""
+    
+    # Step 4: Wait for pods to terminate
     wait_for_pods_terminated "$OPERATOR_NAMESPACE"
     wait_for_pods_terminated "$GITOPS_NAMESPACE"
     echo ""
