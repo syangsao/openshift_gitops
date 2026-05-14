@@ -135,6 +135,28 @@ argocd app sync nmstate-operator --grpc-web --grpc-web-root-path /
 
 > **Note:** All `argocd` CLI commands use `--grpc-web --grpc-web-root-path /` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC.
 
+## Deleting Applications
+
+When deleting ArgoCD applications, the behavior differs between the operator and instance apps:
+
+### Operator app (`nmstate-operator`)
+
+```bash
+argocd app delete nmstate-operator --grpc-web --grpc-web-root-path /
+```
+
+Deleting this app removes the OLM `Subscription`, which triggers OLM's finalizers — the operator, all its pods, and the CRD are automatically cleaned up. No `--cascade` flag is needed.
+
+### Instance app (`nmstate-instance`)
+
+```bash
+argocd app delete nmstate-instance --cascade --grpc-web --grpc-web-root-path /
+```
+
+This app manages a plain CR, not an OLM Subscription. Deleting the app **without `--cascade`** removes only the ArgoCD Application resource — the `NMState` CR stays on the cluster. Use `--cascade` to also delete the CR.
+
+> **Note:** This applies to all non-OLM ArgoCD apps — deleting an Application doesn't remove the resources it created unless you use `--cascade`.
+
 ## Troubleshooting
 
 | Issue | Solution |
