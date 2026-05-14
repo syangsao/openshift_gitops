@@ -383,7 +383,7 @@ verify_cleanup() {
     fi
     
     # Check for remaining CRDs
-    local crd_patterns=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    local crd_patterns=("argocds.argoproj.io" "gitopsservices.pipelines.openshift.io" "appprojects.argoproj.io" "applications.argoproj.io")
     for pattern in "${crd_patterns[@]}"; do
         if oc get crd "$pattern" &>/dev/null; then
             warn "CRD '$pattern' still exists."
