@@ -20,6 +20,7 @@ NC='\033[0m' # No Color
 OPERATOR_NAMESPACE="openshift-gitops-operator"
 GITOPS_NAMESPACE="openshift-gitops"
 CSV_TIMEOUT=300   # seconds to wait for CSV removal
+CRD_TIMEOUT=300   # seconds to wait for CRD removal
 POD_TIMEOUT=300   # seconds to wait for pods to terminate
 POLL_INTERVAL=10  # seconds between polls
 DRY_RUN=false
@@ -57,10 +58,11 @@ The script will:
   3. Delete the Operator Subscription
   4. Delete the ClusterServiceVersion (CSV)
   5. Wait for the CSV to be removed
-  6. Wait for operator pods to terminate
-  7. Delete the OperatorGroup
-  8. Delete the operator and gitops namespaces
-  9. Verify cleanup
+  6. Wait for CRDs to be removed
+  7. Wait for operator pods to terminate
+  8. Delete the OperatorGroup
+  9. Delete the operator and gitops namespaces
+  10. Verify cleanup
 
 WARNING: This operation is irreversible. All ArgoCD instances and operator
 resources will be permanently deleted.
@@ -318,6 +320,46 @@ wait_for_csv_removal() {
     exit 1
 }
 
+wait_for_crds_removal() {
+    check "Waiting for CRDs to be removed (timeout: ${CRD_TIMEOUT}s)..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        info "[DRY-RUN] Would wait for CRD removal."
+        return 0
+    fi
+    
+    # List of GitOps-related CRDs to watch for
+    local crd_patterns=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    
+    local elapsed=0
+    while [ "$elapsed" -lt "$CRD_TIMEOUT" ]; do
+        local remaining_crds=""
+        local all_gone=true
+        
+        for pattern in "${crd_patterns[@]}"; do
+            if oc get crd "$pattern" &>/dev/null; then
+                remaining_crds="$remaining_crds $pattern"
+                all_gone=false
+            fi
+        done
+        
+        if [ "$all_gone" = true ]; then
+            info "All GitOps CRDs have been removed."
+            return 0
+        fi
+        
+        warn "CRDs still present:$remaining_crds (${elapsed}s elapsed)"
+        
+        sleep "$POLL_INTERVAL"
+        elapsed=$((elapsed + POLL_INTERVAL))
+    done
+    
+    warn "Some CRDs were not removed within ${CRD_TIMEOUT}s."
+    warn "Remaining CRDs: $(oc get crd 2>/dev/null | grep -E '(argoproj.io|pipelines.openshift.io)' || echo 'none detected')"
+    warn "CRDs will be cleaned up by OLM. You can manually delete them with:"
+    warn "  oc delete crd <crd-name>"
+}
+
 wait_for_pods_terminated() {
     local namespace="$1"
     check "Waiting for pods in '${namespace}' to terminate (timeout: ${POD_TIMEOUT}s)..."
@@ -469,6 +511,17 @@ verify_cleanup() {
         info "No CSVs remaining."
     fi
     
+    # Check for remaining CRDs
+    local crd_patterns=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    for pattern in "${crd_patterns[@]}"; do
+        if oc get crd "$pattern" &>/dev/null; then
+            warn "CRD '$pattern' still exists."
+            errors=$((errors + 1))
+        else
+            info "CRD '$pattern' removed."
+        fi
+    done
+    
     if [ "$errors" -eq 0 ]; then
         info "Cleanup verified - all resources removed successfully."
     else
@@ -541,14 +594,17 @@ main() {
     # Step 4: Wait for CSV removal
     wait_for_csv_removal
     
-    # Step 5: Wait for operator pods to terminate
+    # Step 5: Wait for CRDs to be removed
+    wait_for_crds_removal
+    
+    # Step 6: Wait for operator pods to terminate
     wait_for_pods_terminated "$OPERATOR_NAMESPACE"
     wait_for_pods_terminated "$GITOPS_NAMESPACE"
     
-    # Step 5: Delete OperatorGroup
+     # Step 7: Delete OperatorGroup
     delete_operator_group
     
-    # Step 6: Delete namespaces
+    # Step 8: Delete namespaces
     delete_namespace "$OPERATOR_NAMESPACE"
     delete_namespace "$GITOPS_NAMESPACE"
     
