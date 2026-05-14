@@ -117,7 +117,7 @@ oc get secret openshift-gitops-cluster -n openshift-gitops -o json | jq -r '.dat
 ### Log in to Argo CD
 
 ```bash
-argocd login openshift-gitops-server-openshift-gitops.apps.YOUR_DOMAIN \
+argocd login $(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}') \
   --username admin \
   --password '<PASSWORD>' \
   --grpc-web \
@@ -126,23 +126,23 @@ argocd login openshift-gitops-server-openshift-gitops.apps.YOUR_DOMAIN \
 ```
 
 > **Note:** Use `--grpc-web` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC — without it the CLI will hang.
->
-> Replace the hostname with your actual Argo CD route:
->
-> ```bash
-> oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}'
-> ```
->
-> You can also fetch it inline:
->
-> ```bash
-> argocd login $(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}') \
->   --username admin \
->   --password '<PASSWORD>' \
->   --grpc-web \
->   --grpc-web-root-path / \
->   --skip-test-tls
-> ```
+
+### Configure ArgoCD CLI for grpc-web (recommended)
+
+Set grpc-web globally so you don't need per-command flags:
+
+```bash
+argocd config set grpc-web true
+argocd config set grpc-web-root-path /
+```
+
+After this, all `argocd` commands work without extra flags:
+
+```bash
+argocd app get <name>
+argocd app sync <name>
+argocd app watch <name>
+```
 
 Or access the Argo CD UI via the route:
 

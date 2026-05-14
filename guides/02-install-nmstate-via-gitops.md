@@ -43,7 +43,7 @@ Argo CD will automatically reconcile the manifests and deploy the operator.
 
 ```bash
 # Watch the application status
-argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app get nmstate-operator
 
 # Check operator pods
 oc get pods -n openshift-nmstate -w
@@ -70,10 +70,10 @@ This creates the `NMState` custom resource, which tells the operator to configur
 
 ```bash
 # Operator app status
-argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app get nmstate-operator
 
 # Instance app status
-argocd app get nmstate-instance --grpc-web --grpc-web-root-path /
+argocd app get nmstate-instance
 ```
 
 ### Check via `oc` CLI
@@ -119,21 +119,21 @@ Both applications use `syncPolicy` with `automated` sync:
 
 ```bash
 # Application details
-argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
-argocd app get nmstate-instance --grpc-web --grpc-web-root-path /
+argocd app get nmstate-operator
+argocd app get nmstate-instance
 
 # Diff between desired (Git) and actual state
-argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /
-argocd app diff nmstate-instance --grpc-web --grpc-web-root-path /
+argocd app diff nmstate-operator
+argocd app diff nmstate-instance
 
 # Watch sync progress
-argocd app watch nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app watch nmstate-operator
 
 # Trigger manual sync if needed
-argocd app sync nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app sync nmstate-operator
 ```
 
-> **Note:** All `argocd` CLI commands use `--grpc-web --grpc-web-root-path /` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC.
+> **Note:** These commands assume you've set grpc-web globally (`argocd config set grpc-web true`). If you haven't, append `--grpc-web --grpc-web-root-path /` to each command.
 
 ## Deleting Applications
 
@@ -142,7 +142,7 @@ When deleting ArgoCD applications, the behavior differs between the operator and
 ### Operator app (`nmstate-operator`)
 
 ```bash
-argocd app delete nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app delete nmstate-operator
 ```
 
 Deleting this app removes the OLM `Subscription`, which triggers OLM's finalizers — the operator, all its pods, and the CRD are automatically cleaned up. No `--cascade` flag is needed.
@@ -150,7 +150,7 @@ Deleting this app removes the OLM `Subscription`, which triggers OLM's finalizer
 ### Instance app (`nmstate-instance`)
 
 ```bash
-argocd app delete nmstate-instance --cascade --grpc-web --grpc-web-root-path /
+argocd app delete nmstate-instance --cascade
 ```
 
 This app manages a plain CR, not an OLM Subscription. Deleting the app **without `--cascade`** removes only the ArgoCD Application resource — the `NMState` CR stays on the cluster. Use `--cascade` to also delete the CR.
@@ -165,6 +165,6 @@ This app manages a plain CR, not an OLM Subscription. Deleting the app **without
 | Sync hangs indefinitely | The NMState CR was included with the operator manifests — use the two-app approach instead |
 | Application shows `Missing` | Verify the Git repo URL in the Application manifest is correct and accessible |
 | Pods not starting | Check `oc describe pod -n openshift-nmstate` for events and errors |
-| Sync fails | Run `argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /` to identify differences |
-| Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
-| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags for all commands |
+|| Sync fails | Run `argocd app diff nmstate-operator` to identify differences |
+|| Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
+|| `argocd` CLI hangs | Set grpc-web globally: `argocd config set grpc-web true` |
