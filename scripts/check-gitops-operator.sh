@@ -71,10 +71,11 @@ The script checks for:
   1. Namespaces (openshift-gitops-operator, openshift-gitops)
   2. Operator Subscription
   3. ClusterServiceVersion (CSV)
-  4. Operator pods status
-  5. ArgoCD instance(s)
-  6. ArgoCD pods status
-  7. OperatorGroup
+  4. CRDs (argocds, gitopsservices, appprojects, applications)
+  5. Operator pods status
+  6. ArgoCD instance(s)
+  7. ArgoCD pods status
+  8. OperatorGroup
 
 Exit codes:
   0  - Consistent state (fully installed or fully uninstalled)
@@ -169,6 +170,35 @@ check_csv() {
     fi
 }
 
+check_crds() {
+    check "Checking CRDs..."
+    
+    # CRDs should ALL exist (installed) or ALL be absent (uninstalled)
+    # Mixed presence = inconsistent state
+    local crd_names=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    local present_count=0
+    local absent_count=0
+    
+    for crd in "${crd_names[@]}"; do
+        if oc get crd "$crd" &>/dev/null; then
+            pass "CRD '$crd' exists"
+            present_count=$((present_count + 1))
+        else
+            fail "CRD '$crd' missing"
+            absent_count=$((absent_count + 1))
+        fi
+    done
+    
+    # Report consistency
+    if [ "$present_count" -eq "${#crd_names[@]}" ]; then
+        info "All CRDs present (installed state)."
+    elif [ "$absent_count" -eq "${#crd_names[@]}" ]; then
+        info "All CRDs absent (uninstalled state)."
+    else
+        warn "Inconsistent CRD state - $present_count present, $absent_count absent."
+    fi
+}
+
 check_operator_pods() {
     check "Checking operator pods in '$OPERATOR_NAMESPACE'..."
     
@@ -213,12 +243,17 @@ check_argocd_instance() {
         for instance in $instances; do
             local name
             name=$(echo "$instance" | sed 's|argocd/||')
-            local conditions
-            conditions=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[*].type}' 2>/dev/null || echo "")
-            if echo "$conditions" | grep -q "Established"; then
-                pass "ArgoCD instance '$name' is Established"
+            # ArgoCD CR uses .status.phase (Ready/Progressing/Missing/Failed)
+            # NOT .status.conditions[*].type which was the old buggy check
+            local phase
+            phase=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "unknown")
+            if [ "$phase" = "Ready" ]; then
+                pass "ArgoCD instance '$name' phase: $phase"
+            elif [ "$phase" = "Progressing" ]; then
+                warn "ArgoCD instance '$name' phase: $phase (still deploying)"
+                pass "ArgoCD instance '$name' phase: $phase"
             else
-                fail "ArgoCD instance '$name' is not Established (conditions: $conditions)"
+                fail "ArgoCD instance '$name' phase: $phase (expected: Ready or Progressing)"
             fi
         done
     else
@@ -348,6 +383,8 @@ main() {
     check_subscription
     echo ""
     check_csv
+    echo ""
+    check_crds
     echo ""
     check_operator_pods
     echo ""
