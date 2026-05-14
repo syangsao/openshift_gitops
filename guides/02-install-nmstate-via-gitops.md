@@ -126,8 +126,11 @@ argocd app get nmstate-instance --grpc-web --grpc-web-root-path /
 argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /
 argocd app diff nmstate-instance --grpc-web --grpc-web-root-path /
 
-# Watch sync progress
-argocd app watch nmstate-operator --grpc-web --grpc-web-root-path /
+# Watch sync progress (all apps)
+argocd app watch --grpc-web --grpc-web-root-path /
+
+# Watch a specific app (using `watch` command)
+watch -n 5 'argocd app get nmstate-operator --grpc-web --grpc-web-root-path /'
 
 # Trigger manual sync if needed
 argocd app sync nmstate-operator --grpc-web --grpc-web-root-path /
