@@ -242,19 +242,25 @@ check_argocd_instance() {
         for instance in $instances; do
             local name
             name=$(echo "$instance" | sed 's|argocd/||')
-            # ArgoCD CR from Red Hat operator uses conditions, not phase
-            # Check for a condition with type="Ready" and status="True"
-            local ready_status
-            ready_status=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-            if [ "$ready_status" = "True" ]; then
-                pass "ArgoCD instance '$name' is Ready"
-            elif [ "$ready_status" = "False" ]; then
-                fail "ArgoCD instance '$name' is not Ready"
+            # ArgoCD CR from Red Hat operator uses conditions with types "Established" and "Available"
+            # Check for a condition with type="Available" and status="True"
+            local available_status
+            available_status=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
+            if [ "$available_status" = "True" ]; then
+                pass "ArgoCD instance '$name' is Available"
+            elif [ "$available_status" = "False" ]; then
+                fail "ArgoCD instance '$name' is not Available"
             else
-                # No Ready condition yet — instance is being deployed
+                # No Available condition yet — instance is being deployed
+                local established
+                established=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || echo "")
                 local msg
                 msg=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null || echo "")
-                warn "ArgoCD instance '$name' has no Ready condition yet (msg: $msg)"
+                if [ "$established" = "True" ]; then
+                    warn "ArgoCD instance '$name' is Established but not yet Available (msg: $msg)"
+                else
+                    warn "ArgoCD instance '$name' has no Available condition yet (msg: $msg)"
+                fi
                 pass "ArgoCD instance '$name' exists (deploying)"
             fi
         done
