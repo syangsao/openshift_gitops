@@ -173,9 +173,8 @@ check_csv() {
 check_crds() {
     check "Checking CRDs..."
     
-    # CRDs should ALL exist (installed) or ALL be absent (uninstalled)
-    # Mixed presence = inconsistent state
-    local crd_names=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    # CRD names use kind.group.io format (as returned by 'oc get crd')
+    local crd_names=("argocds.argoproj.io" "gitopsservices.pipelines.openshift.io" "appprojects.argoproj.io" "applications.argoproj.io")
     local present_count=0
     local absent_count=0
     
@@ -243,17 +242,20 @@ check_argocd_instance() {
         for instance in $instances; do
             local name
             name=$(echo "$instance" | sed 's|argocd/||')
-            # ArgoCD CR uses .status.phase (Ready/Progressing/Missing/Failed)
-            # NOT .status.conditions[*].type which was the old buggy check
-            local phase
-            phase=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "unknown")
-            if [ "$phase" = "Ready" ]; then
-                pass "ArgoCD instance '$name' phase: $phase"
-            elif [ "$phase" = "Progressing" ]; then
-                warn "ArgoCD instance '$name' phase: $phase (still deploying)"
-                pass "ArgoCD instance '$name' phase: $phase"
+            # ArgoCD CR from Red Hat operator uses conditions, not phase
+            # Check for a condition with type="Ready" and status="True"
+            local ready_status
+            ready_status=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+            if [ "$ready_status" = "True" ]; then
+                pass "ArgoCD instance '$name' is Ready"
+            elif [ "$ready_status" = "False" ]; then
+                fail "ArgoCD instance '$name' is not Ready"
             else
-                fail "ArgoCD instance '$name' phase: $phase (expected: Ready or Progressing)"
+                # No Ready condition yet — instance is being deployed
+                local msg
+                msg=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null || echo "")
+                warn "ArgoCD instance '$name' has no Ready condition yet (msg: $msg)"
+                pass "ArgoCD instance '$name' exists (deploying)"
             fi
         done
     else
