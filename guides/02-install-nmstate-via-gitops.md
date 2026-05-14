@@ -8,74 +8,72 @@ This guide walks through deploying and managing the Kubernetes nmstate operator 
 - **Git repository** – You need a Git repository to store the nmstate manifests (this repository can serve as one).
 - **`argocd` CLI** (optional) – Useful for verifying from the command line.
 
-## Step 1: Prepare the nmstate Manifests
+## Overview
 
-The manifests needed to install the nmstate operator are located in `operators/nmstate/`:
+The nmstate operator deployment uses **two separate ArgoCD applications**:
+
+1. **`nmstate-operator`** — Deploys the namespace, OperatorGroup, and Subscription (installs the operator)
+2. **`nmstate-instance`** — Creates the NMState custom resource (applied *after* the operator is installed)
+
+This two-app approach avoids a sync hang: the NMState CRD is created by the operator itself, so the CR cannot be applied before the operator is running.
+
+## Step 1: Review the Manifests
+
+The operator manifests are in `operators/nmstate/`:
 
 - `namespace.yaml` – Creates the `openshift-nmstate` namespace
-- `operator-group.yaml` – Configures the operator group for the nmstate namespace
-- `subscription.yaml` – Subscribes to the `kubernetes-nmstate-operator` from Red Hat operators
-- `nmstate-instance.yaml` – Creates the NMState custom resource instance
+- `operator-group.yaml` – Configures the operator group
+- `subscription.yaml` – Subscribes to `kubernetes-nmstate-operator` from Red Hat operators
 
-These files are already included in this repository under `operators/nmstate/`.
+The NMState instance is in `operators/nmstate-instance/`:
 
-## Step 2: Commit and Push to Git
+- `nmstate-instance.yaml` – Creates the NMState custom resource
 
-Push these manifests to your Git repository:
+## Step 2: Deploy the nmstate Operator
 
-```bash
-git add operators/nmstate/
-git commit -m "Add nmstate operator manifests"
-git push origin main
-```
-
-## Step 3: Create an ArgoCD Application
-
-An ArgoCD Application resource tells Argo CD which Git repository and path to reconcile. The application manifest is located at `operators/argocd-applications/nmstate-operator-app.yaml`:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: nmstate-operator
-  namespace: openshift-gitops
-spec:
-  project: default
-  source:
-    repoURL: 'https://github.com/YOUR_USERNAME/openshift_gitops.git'
-    targetRevision: main
-    path: operators/nmstate
-  destination:
-    server: 'https://kubernetes.default.svc'
-    namespace: openshift-nmstate
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-    - CreateNamespace=true
-```
-
-**Important**: Replace `YOUR_USERNAME` with your actual GitHub (or Git server) username before applying.
-
-## Step 4: Apply the ArgoCD Application
+Apply the operator app:
 
 ```bash
 oc apply -f operators/argocd-applications/nmstate-operator-app.yaml
 ```
 
-Argo CD will automatically begin reconciling the manifests from your Git repository and deploy the nmstate operator.
+Argo CD will automatically reconcile the manifests and deploy the operator.
+
+## Step 3: Wait for the Operator to Be Ready
+
+```bash
+# Watch the application status
+argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
+
+# Check operator pods
+oc get pods -n openshift-nmstate -w
+
+# Verify the CSV phase
+oc get csv -n openshift-nmstate -o jsonpath='{.items[0].status.phase}'
+```
+
+The operator is ready when all pods are `Running` and the CSV phase is `Succeeded`.
+
+## Step 4: Deploy the NMState Instance
+
+Once the operator is running, apply the instance app:
+
+```bash
+oc apply -f operators/argocd-applications/nmstate-instance-app.yaml
+```
+
+This creates the `NMState` custom resource, which tells the operator to configure networking.
 
 ## Step 5: Verify the Deployment
 
 ### Check via ArgoCD CLI
 
 ```bash
-# Get application status
-argocd app get nmstate-operator
+# Operator app status
+argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
 
-# Check for diffs between Git and live state
-argocd app diff nmstate-operator
+# Instance app status
+argocd app get nmstate-instance --grpc-web --grpc-web-root-path /
 ```
 
 ### Check via `oc` CLI
@@ -94,21 +92,26 @@ oc get nmstate -n openshift-nmstate
 ### Check via ArgoCD UI
 
 1. Get the ArgoCD route:
+
    ```bash
    oc get route openshift-gitops-server -n openshift-gitops
    ```
+
 2. Log in with the admin password:
+
    ```bash
-   oc get secret openshift-gitops-cluster -n openshift-gitops -o jsonpath='{.data.admin.password}' | base64 -d
+   oc get secret openshift-gitops-cluster -n openshift-gitops -o json | jq -r '.data["admin.password"]' | base64 -d
    ```
-3. Navigate to the **Applications** section and find `nmstate-operator`.
+
+3. Navigate to the **Applications** section and find `nmstate-operator` and `nmstate-instance`.
 4. Verify that both **Health** and **Sync Status** show `Healthy` and `Synced`.
 
 ## Step 6: Check ArgoCD Health and Sync Status
 
 ### Automated reconciliation
 
-The `syncPolicy` in the Application manifest enables `automated` sync with:
+Both applications use `syncPolicy` with `automated` sync:
+
 - **`prune: true`** – Resources deleted from Git are removed from the cluster
 - **`selfHeal: true`** – Drifted resources are automatically corrected
 
@@ -116,23 +119,30 @@ The `syncPolicy` in the Application manifest enables `automated` sync with:
 
 ```bash
 # Application details
-argocd app get nmstate-operator
+argocd app get nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app get nmstate-instance --grpc-web --grpc-web-root-path /
 
 # Diff between desired (Git) and actual state
-argocd app diff nmstate-operator
+argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /
+argocd app diff nmstate-instance --grpc-web --grpc-web-root-path /
 
 # Watch sync progress
-argocd app watch nmstate-operator
+argocd app watch nmstate-operator --grpc-web --grpc-web-root-path /
 
 # Trigger manual sync if needed
-argocd app sync nmstate-operator
+argocd app sync nmstate-operator --grpc-web --grpc-web-root-path /
 ```
+
+> **Note:** All `argocd` CLI commands use `--grpc-web --grpc-web-root-path /` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
+| Application shows `OutOfSync / Missing` | The app hasn't been synced yet — apply the app manifest with `oc apply` |
+| Sync hangs indefinitely | The NMState CR was included with the operator manifests — use the two-app approach instead |
 | Application shows `Missing` | Verify the Git repo URL in the Application manifest is correct and accessible |
 | Pods not starting | Check `oc describe pod -n openshift-nmstate` for events and errors |
-| Sync fails | Run `argocd app diff nmstate-operator` to identify configuration differences |
+| Sync fails | Run `argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /` to identify differences |
 | Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
+| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags for all commands |
