@@ -17,9 +17,10 @@ NC='\033[0m' # No Color
 # Configuration
 OPERATOR_NAMESPACE="openshift-gitops-operator"
 GITOPS_NAMESPACE="openshift-gitops"
-CSV_TIMEOUT=600  # seconds to wait for CSV
-POD_TIMEOUT=600  # seconds to wait for pods
-POLL_INTERVAL=10 # seconds between polls
+CSV_TIMEOUT=600   # seconds to wait for CSV
+POD_TIMEOUT=600   # seconds to wait for pods
+ARGOCD_TIMEOUT=300 # seconds to wait for ArgoCD instance
+POLL_INTERVAL=10  # seconds between polls
 
 # Script directory (for locating YAML files)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,7 +55,7 @@ The script will:
   4. Apply the Subscription
   5. Wait for the CSV to reach Succeeded phase
   6. Wait for all pods in openshift-gitops and openshift-gitops-operator namespaces
-  7. Verify the ArgoCD instance
+  7. Wait for the ArgoCD instance to be created and Established
   8. Print the admin password retrieval command
 
 EOF
@@ -187,15 +188,33 @@ wait_for_pods() {
     exit 1
 }
 
-verify_argocd() {
-    check "Verifying ArgoCD instance..."
-    local argocd
-    argocd=$(oc get argocd -n "$GITOPS_NAMESPACE" -o name 2>/dev/null || echo "")
-    if [ -z "$argocd" ]; then
-        error "No ArgoCD instance found in namespace '$GITOPS_NAMESPACE'."
-        exit 1
-    fi
-    info "ArgoCD instance found: $argocd"
+wait_for_argocd() {
+    check "Waiting for ArgoCD instance in '${GITOPS_NAMESPACE}' (timeout: ${ARGOCD_TIMEOUT}s)..."
+    local elapsed=0
+    while [ "$elapsed" -lt "$ARGOCD_TIMEOUT" ]; do
+        local argocd
+        argocd=$(oc get argocd -n "$GITOPS_NAMESPACE" -o name 2>/dev/null || echo "")
+        if [ -n "$argocd" ]; then
+            info "ArgoCD instance found: $argocd"
+            # Also wait for the ArgoCD instance to be established
+            local conditions
+            conditions=$(oc get argocd "$argocd" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[*].type}' 2>/dev/null || echo "")
+            if echo "$conditions" | grep -q "Established"; then
+                info "ArgoCD instance is Established."
+                return 0
+            fi
+            warn "ArgoCD instance exists but not yet Established (${elapsed}s elapsed)"
+            sleep "$POLL_INTERVAL"
+            elapsed=$((elapsed + POLL_INTERVAL))
+            return 0
+        fi
+        warn "ArgoCD instance not yet created (${elapsed}s elapsed)"
+        sleep "$POLL_INTERVAL"
+        elapsed=$((elapsed + POLL_INTERVAL))
+    done
+    error "ArgoCD instance was not created within ${ARGOCD_TIMEOUT}s."
+    error "Check operator logs: oc logs -n $OPERATOR_NAMESPACE -l app=openshift-gitops-operator"
+    exit 1
 }
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
@@ -231,7 +250,7 @@ main() {
     wait_for_csv
     wait_for_pods "$GITOPS_NAMESPACE"
     wait_for_pods "$OPERATOR_NAMESPACE"
-    verify_argocd
+    wait_for_argocd
 
     echo ""
     echo "========================================"
