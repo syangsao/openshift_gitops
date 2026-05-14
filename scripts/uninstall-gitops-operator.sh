@@ -23,6 +23,7 @@ NS_TIMEOUT=300   # seconds to wait for namespace deletion
 POD_TIMEOUT=300  # seconds to wait for pods to terminate
 POLL_INTERVAL=10  # seconds between polls
 DRY_RUN=false
+DELETE_CRDS=false
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,7 +45,12 @@ from the cluster.
 
 Options:
   --dry-run    Show what would be removed without actually deleting.
+  --delete-crds  Also delete the CRDs (use with caution - see below).
   --help, -h   Show this help message and exit.
+
+CRDs are cluster-scoped resources that define ArgoCD custom resource types.
+Deleting them orphans any ArgoCD resources in other namespaces on the cluster.
+Only use --delete-crds if you are sure no ArgoCD resources remain.
 
 Prerequisites:
   - oc CLI installed and available in PATH
@@ -369,6 +375,30 @@ wait_for_namespace_deletion() {
     warn "It will be cleaned up by the garbage collector."
 }
 
+delete_crds() {
+    check "Deleting GitOps CRDs..."
+    
+    # CRDs are cluster-scoped and deletion orphans any remaining ArgoCD resources.
+    # Only delete them if --delete-crds was explicitly requested.
+    local crd_names=("argocds.argoproj.io" "gitopsservices.pipelines.openshift.io" "appprojects.argoproj.io" "applications.argoproj.io")
+    
+    for crd in "${crd_names[@]}"; do
+        if ! oc get crd "$crd" &>/dev/null; then
+            info "CRD '$crd' already absent. Skipping."
+            continue
+        fi
+        
+        dry "Deleting CRD '$crd'..."
+        if [ "$DRY_RUN" != true ]; then
+            if oc delete crd "$crd" 2>/dev/null; then
+                info "Deleted CRD '$crd'."
+            else
+                warn "Failed to delete CRD '$crd'. It may be in use by other resources."
+            fi
+        fi
+    done
+}
+
 verify_cleanup() {
     check "Verifying cleanup..."
     local errors=0
@@ -410,15 +440,25 @@ verify_cleanup() {
     fi
     
     # Check for remaining CRDs
+    # CRDs are cluster-scoped and OLM does not automatically clean them up.
+    # They linger indefinitely but are harmless metadata.
+    # Do NOT count them as errors - this is expected behavior.
     local crd_patterns=("argocds.argoproj.io" "gitopsservices.pipelines.openshift.io" "appprojects.argoproj.io" "applications.argoproj.io")
+    local crds_remaining=0
     for pattern in "${crd_patterns[@]}"; do
         if oc get crd "$pattern" &>/dev/null; then
-            warn "CRD '$pattern' still exists."
-            errors=$((errors + 1))
-        else
-            info "CRD '$pattern' removed."
+            crds_remaining=$((crds_remaining + 1))
         fi
     done
+    
+    if [ "$crds_remaining" -gt 0 ]; then
+        warn "$crds_remaining CRD(s) still exist. This is expected - OLM does not automatically clean up CRDs."
+        info "To remove them manually, run:"
+        info "  oc delete crd argocds.argoproj.io gitopsservices.pipelines.openshift.io appprojects.argoproj.io applications.argoproj.io"
+        info "WARNING: Only delete CRDs if you have no ArgoCD resources in other namespaces."
+    else
+        info "All CRDs removed."
+    fi
     
     if [ "$errors" -eq 0 ]; then
         info "Cleanup verified - all resources removed successfully."
@@ -434,6 +474,7 @@ main() {
     for arg in "$@"; do
         case "$arg" in
             --dry-run) DRY_RUN=true ;;
+            --delete-crds) DELETE_CRDS=true ;;
             --help|-h) usage ;;
         esac
     done
@@ -496,6 +537,12 @@ main() {
     wait_for_namespace_deletion "$OPERATOR_NAMESPACE"
     wait_for_namespace_deletion "$GITOPS_NAMESPACE"
     echo ""
+    
+    # Step 5.5: Optionally delete CRDs
+    if [ "$DELETE_CRDS" = true ]; then
+        delete_crds
+        echo ""
+    fi
     
     # Step 6: Verify cleanup
     verify_cleanup
