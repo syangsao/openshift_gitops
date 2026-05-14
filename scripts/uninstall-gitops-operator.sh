@@ -19,9 +19,8 @@ NC='\033[0m' # No Color
 # Configuration
 OPERATOR_NAMESPACE="openshift-gitops-operator"
 GITOPS_NAMESPACE="openshift-gitops"
-CSV_TIMEOUT=300   # seconds to wait for CSV removal
-CRD_TIMEOUT=300   # seconds to wait for CRD removal
-POD_TIMEOUT=300   # seconds to wait for pods to terminate
+NS_TIMEOUT=300   # seconds to wait for namespace deletion
+POD_TIMEOUT=300  # seconds to wait for pods to terminate
 POLL_INTERVAL=10  # seconds between polls
 DRY_RUN=false
 
@@ -56,13 +55,10 @@ The script will:
   1. Validate prerequisites (oc CLI, login, cluster-admin role)
   2. Delete ArgoCD instances in all namespaces
   3. Delete the Operator Subscription
-  4. Delete the ClusterServiceVersion (CSV)
-  5. Wait for the CSV to be removed
-  6. Wait for CRDs to be removed
-  7. Wait for operator pods to terminate
-  8. Delete the OperatorGroup
-  9. Delete the operator and gitops namespaces
-  10. Verify cleanup
+  4. Wait for operator pods to terminate
+  5. Delete the operator and gitops namespaces (removes CSV, OperatorGroup)
+  6. Wait for namespaces to be fully deleted
+  7. Verify cleanup (namespaces, ArgoCD instances, CRDs)
 
 WARNING: This operation is irreversible. All ArgoCD instances and operator
 resources will be permanently deleted.
@@ -265,101 +261,6 @@ delete_subscription() {
     done
 }
 
-delete_csv() {
-    check "Deleting ClusterServiceVersion (CSV)..."
-    
-    local csvs
-    csvs=$(oc get csv -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null || echo "")
-    
-    if [ -z "$csvs" ]; then
-        info "No CSV found in '$OPERATOR_NAMESPACE'. Skipping."
-        return 0
-    fi
-    
-    for csv in $csvs; do
-        local name
-        name=$(echo "$csv" | sed 's|clusterserviceversion.operators.coreos.com/||')
-        dry "Deleting CSV '$name' in '$OPERATOR_NAMESPACE'..."
-        if [ "$DRY_RUN" != true ]; then
-            if oc delete csv "$name" -n "$OPERATOR_NAMESPACE" 2>/dev/null; then
-                info "Deleted CSV '$name'."
-            else
-                warn "Failed to delete CSV '$name'."
-            fi
-        fi
-    done
-}
-
-wait_for_csv_removal() {
-    check "Waiting for CSV to be removed (timeout: ${CSV_TIMEOUT}s)..."
-    
-    if [ "$DRY_RUN" = true ]; then
-        info "[DRY-RUN] Would wait for CSV removal."
-        return 0
-    fi
-    
-    local elapsed=0
-    while [ "$elapsed" -lt "$CSV_TIMEOUT" ]; do
-        local csv_count
-        csv_count=$(oc get csv -n "$OPERATOR_NAMESPACE" --no-headers 2>/dev/null | wc -l || echo "0")
-        if [ "$csv_count" -eq 0 ]; then
-            info "CSV has been removed."
-            return 0
-        fi
-        
-        local phase
-        phase=$(oc get csv -n "$OPERATOR_NAMESPACE" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "unknown")
-        warn "CSV still present (phase: $phase, ${elapsed}s elapsed)"
-        
-        sleep "$POLL_INTERVAL"
-        elapsed=$((elapsed + POLL_INTERVAL))
-    done
-    
-    error "CSV was not removed within ${CSV_TIMEOUT}s."
-    oc get csv -n "$OPERATOR_NAMESPACE" 2>/dev/null || true
-    exit 1
-}
-
-wait_for_crds_removal() {
-    check "Waiting for CRDs to be removed (timeout: ${CRD_TIMEOUT}s)..."
-    
-    if [ "$DRY_RUN" = true ]; then
-        info "[DRY-RUN] Would wait for CRD removal."
-        return 0
-    fi
-    
-    # List of GitOps-related CRDs to watch for
-    local crd_patterns=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
-    
-    local elapsed=0
-    while [ "$elapsed" -lt "$CRD_TIMEOUT" ]; do
-        local remaining_crds=""
-        local all_gone=true
-        
-        for pattern in "${crd_patterns[@]}"; do
-            if oc get crd "$pattern" &>/dev/null; then
-                remaining_crds="$remaining_crds $pattern"
-                all_gone=false
-            fi
-        done
-        
-        if [ "$all_gone" = true ]; then
-            info "All GitOps CRDs have been removed."
-            return 0
-        fi
-        
-        warn "CRDs still present:$remaining_crds (${elapsed}s elapsed)"
-        
-        sleep "$POLL_INTERVAL"
-        elapsed=$((elapsed + POLL_INTERVAL))
-    done
-    
-    warn "Some CRDs were not removed within ${CRD_TIMEOUT}s."
-    warn "Remaining CRDs: $(oc get crd 2>/dev/null | grep -E '(argoproj.io|pipelines.openshift.io)' || echo 'none detected')"
-    warn "CRDs will be cleaned up by OLM. You can manually delete them with:"
-    warn "  oc delete crd <crd-name>"
-}
-
 wait_for_pods_terminated() {
     local namespace="$1"
     check "Waiting for pods in '${namespace}' to terminate (timeout: ${POD_TIMEOUT}s)..."
@@ -391,59 +292,39 @@ wait_for_pods_terminated() {
     exit 1
 }
 
-delete_operator_group() {
-    check "Deleting OperatorGroup..."
+delete_namespaces() {
+    check "Deleting GitOps namespaces..."
     
-    local ogs
-    ogs=$(oc get operatorgroup -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null || echo "")
+    local namespaces=("$OPERATOR_NAMESPACE" "$GITOPS_NAMESPACE")
     
-    if [ -z "$ogs" ]; then
-        info "No OperatorGroup found in '$OPERATOR_NAMESPACE'. Skipping."
-        return 0
-    fi
-    
-    for og in $ogs; do
-        local name
-        name=$(echo "$og" | sed 's|operatorgroup.operators.coreos.com/||')
-        dry "Deleting OperatorGroup '$name' in '$OPERATOR_NAMESPACE'..."
+    for namespace in "${namespaces[@]}"; do
+        if ! oc get namespace "$namespace" &>/dev/null; then
+            info "Namespace '${namespace}' does not exist. Skipping."
+            continue
+        fi
+        
+        dry "Deleting namespace '${namespace}'..."
         if [ "$DRY_RUN" != true ]; then
-            if oc delete operatorgroup "$name" -n "$OPERATOR_NAMESPACE" 2>/dev/null; then
-                info "Deleted OperatorGroup '$name'."
+            if oc delete namespace "$namespace" 2>/dev/null; then
+                info "Namespace '${namespace}' deletion initiated."
             else
-                warn "Failed to delete OperatorGroup '$name'."
+                warn "Failed to delete namespace '${namespace}'."
             fi
         fi
     done
-}
-
-delete_namespace() {
-    local namespace="$1"
-    check "Deleting namespace '${namespace}'..."
-    
-    if ! oc get namespace "$namespace" &>/dev/null; then
-        info "Namespace '${namespace}' does not exist. Skipping."
-        return 0
-    fi
-    
-    dry "Deleting namespace '${namespace}'..."
-    if [ "$DRY_RUN" != true ]; then
-        if oc delete namespace "$namespace" 2>/dev/null; then
-            info "Namespace '${namespace}' deletion initiated."
-            # Wait for namespace to be fully deleted
-            wait_for_namespace_deletion "$namespace"
-        else
-            error "Failed to delete namespace '${namespace}'."
-        fi
-    fi
 }
 
 wait_for_namespace_deletion() {
     local namespace="$1"
     check "Waiting for namespace '${namespace}' to be deleted..."
     
+    if [ "$DRY_RUN" = true ]; then
+        info "[DRY-RUN] Would wait for namespace '${namespace}' to be deleted."
+        return 0
+    fi
+    
     local elapsed=0
-    local timeout=120
-    while [ "$elapsed" -lt "$timeout" ]; do
+    while [ "$elapsed" -lt "$NS_TIMEOUT" ]; do
         if ! oc get namespace "$namespace" &>/dev/null; then
             info "Namespace '${namespace}' has been deleted."
             return 0
@@ -457,7 +338,7 @@ wait_for_namespace_deletion() {
         elapsed=$((elapsed + POLL_INTERVAL))
     done
     
-    warn "Namespace '${namespace}' has not been fully deleted within ${timeout}s."
+    warn "Namespace '${namespace}' has not been fully deleted within ${NS_TIMEOUT}s."
     warn "It will be cleaned up by the garbage collector."
 }
 
@@ -473,7 +354,7 @@ verify_cleanup() {
         info "Namespace '$OPERATOR_NAMESPACE' removed."
     fi
     
-    # Check gitops namespace (may still exist if user created resources there)
+    # Check gitops namespace
     if oc get namespace "$GITOPS_NAMESPACE" &>/dev/null; then
         warn "Namespace '$GITOPS_NAMESPACE' still exists."
         errors=$((errors + 1))
@@ -499,16 +380,6 @@ verify_cleanup() {
         errors=$((errors + 1))
     else
         info "No subscriptions remaining."
-    fi
-    
-    # Check for remaining CSVs
-    local csvs
-    csvs=$(oc get csv -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null || echo "")
-    if [ -n "$csvs" ]; then
-        warn "Remaining CSVs: $csvs"
-        errors=$((errors + 1))
-    else
-        info "No CSVs remaining."
     fi
     
     # Check for remaining CRDs
@@ -551,13 +422,10 @@ main() {
     else
         echo ""
         echo "========================================"
-        error "WARNING: This will permanently remove OpenShift GitOps"
-        echo "========================================"
-        echo ""
-        echo ""
-        echo "========================================"
         info "OpenShift GitOps Uninstaller"
         echo "========================================"
+        echo ""
+        warn "WARNING: This operation is irreversible."
         echo ""
     fi
     
@@ -566,63 +434,40 @@ main() {
     check_oc_login
     check_cluster_admin
     
-    echo ""
+    # Pre-flight
     check_gitops_installed
-    
-    if [ "$DRY_RUN" != true ]; then
-        echo ""
-        info "Starting GitOps operator uninstallation..."
-        echo ""
-    else
-        echo ""
-        info "Showing what would be removed..."
-        echo ""
-    fi
-    
-    # Scan for ArgoCD instances
-    find_argocd_instances
+    echo ""
+    info "Starting GitOps operator uninstallation..."
+    echo ""
     
     # Step 1: Delete ArgoCD instances
+    find_argocd_instances
+    echo ""
     delete_argocd_instances
+    echo ""
     
     # Step 2: Delete subscription
     delete_subscription
+    echo ""
     
-    # Step 3: Delete CSV explicitly (OLM does not always auto-delete it)
-    delete_csv
-    
-    # Step 4: Wait for CSV removal
-    wait_for_csv_removal
-    
-    # Step 5: Wait for CRDs to be removed
-    wait_for_crds_removal
-    
-    # Step 6: Wait for operator pods to terminate
+    # Step 3: Wait for pods to terminate
     wait_for_pods_terminated "$OPERATOR_NAMESPACE"
     wait_for_pods_terminated "$GITOPS_NAMESPACE"
-    
-     # Step 7: Delete OperatorGroup
-    delete_operator_group
-    
-    # Step 8: Delete namespaces
-    delete_namespace "$OPERATOR_NAMESPACE"
-    delete_namespace "$GITOPS_NAMESPACE"
-    
     echo ""
-    if [ "$DRY_RUN" = true ]; then
-        echo "========================================"
-        info "Dry run complete. No changes were made."
-        echo "========================================"
-    else
-        # Step 7: Verify cleanup
-        verify_cleanup
-        
-        echo ""
-        echo "========================================"
-        info "GitOps operator uninstalled successfully!"
-        echo "========================================"
-    fi
+    
+    # Step 4: Delete namespaces
+    # Deleting the namespaces removes the CSV, OperatorGroup, and all other resources
+    # This is more reliable than deleting individual OLM resources which can hang
+    delete_namespaces
     echo ""
+    
+    # Step 5: Wait for namespaces to be deleted
+    wait_for_namespace_deletion "$OPERATOR_NAMESPACE"
+    wait_for_namespace_deletion "$GITOPS_NAMESPACE"
+    echo ""
+    
+    # Step 6: Verify cleanup
+    verify_cleanup
 }
 
 main "$@"
