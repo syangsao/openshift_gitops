@@ -134,6 +134,14 @@ argocd app sync nmstate-operator --grpc-web --grpc-web-root-path /
 ```
 
 > **Note:** All `argocd` CLI commands use `--grpc-web --grpc-web-root-path /` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC.
+>
+> **Tip:** To avoid typing these flags on every command, create a shell alias:
+>
+> ```bash
+> alias argocd='argocd --grpc-web --grpc-web-root-path /'
+> ```
+>
+> Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent. Note that `argocd login` also needs `--skip-test-tls`.
 
 ## Deleting Applications
 
@@ -167,4 +175,4 @@ This app manages a plain CR, not an OLM Subscription. Deleting the app **without
 | Pods not starting | Check `oc describe pod -n openshift-nmstate` for events and errors |
 | Sync fails | Run `argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /` to identify differences |
 | Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
-| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags for all commands |
+|| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags, or create a shell alias |
