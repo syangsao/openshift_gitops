@@ -55,8 +55,10 @@ The script will:
   4. Apply the Subscription
   5. Wait for the CSV to reach Succeeded phase
   6. Wait for all pods in openshift-gitops and openshift-gitops-operator namespaces
-  7. Wait for the ArgoCD instance to be created and Established
-  8. Print the admin password retrieval command
+  7. Wait for the ArgoCD instance to be created
+  8. Display the Argo CD UI URL, admin password, and login command
+
+Requires 'jq' to be installed to retrieve the admin password.
 
 EOF
     exit 0
@@ -258,16 +260,45 @@ main() {
     echo "========================================"
     echo ""
 
-    # Post-install info
-    info "Retrieve the Argo CD admin password with:"
-    echo "  oc get secret openshift-gitops-cluster -n $GITOPS_NAMESPACE -o jsonpath='{.data.admin.password}' | base64 -d"
-    echo ""
-    info "Access the Argo CD UI with:"
-    echo "  oc get route openshift-gitops-server -n $GITOPS_NAMESPACE"
-    echo ""
-    info "Log in to Argo CD CLI with:"
-    echo "  argocd login <ARGOCD_ROUTE> --username admin --password <PASSWORD>"
-    echo ""
+    # Post-install info — fetch actual values
+    info "Retrieving Argo CD admin credentials..."
+    
+    # Fetch the admin password using jq (handles dotted keys correctly)
+    local admin_password=""
+    if command -v jq &>/dev/null; then
+        admin_password=$(oc get secret openshift-gitops-cluster -n "$GITOPS_NAMESPACE" -o json | jq -r '.data["admin.password"]' | base64 -d 2>/dev/null || echo "")
+    fi
+    
+    # Fetch the ArgoCD route URL
+    local route_url=""
+    route_url=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    
+    if [ -n "$route_url" ]; then
+        info "Argo CD UI is available at: https://$route_url"
+        echo ""
+    fi
+    
+    if [ -n "$admin_password" ]; then
+        info "Argo CD admin password:"
+        echo "  $admin_password"
+        echo ""
+    else
+        info "Could not retrieve admin password automatically."
+        info "Try manually:"
+        echo "  oc get secret openshift-gitops-cluster -n $GITOPS_NAMESPACE -o json | jq -r '.data[\"admin.password\"]' | base64 -d"
+        echo ""
+    fi
+    
+    # Show the complete login command with actual values
+    if [ -n "$route_url" ] && [ -n "$admin_password" ]; then
+        info "Log in to Argo CD CLI with:"
+        echo "  argocd login https://$route_url --username admin --password '$admin_password' --insecure"
+        echo ""
+    elif [ -n "$route_url" ]; then
+        info "Log in to Argo CD CLI with:"
+        echo "  argocd login https://$route_url --username admin --password <PASSWORD> --insecure"
+        echo ""
+    fi
 }
 
 main "$@"
