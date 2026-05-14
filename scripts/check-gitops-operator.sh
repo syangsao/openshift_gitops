@@ -71,10 +71,11 @@ The script checks for:
   1. Namespaces (openshift-gitops-operator, openshift-gitops)
   2. Operator Subscription
   3. ClusterServiceVersion (CSV)
-  4. Operator pods status
-  5. ArgoCD instance(s)
-  6. ArgoCD pods status
-  7. OperatorGroup
+  4. CRDs (argocds, gitopsservices, appprojects, applications)
+  5. Operator pods status
+  6. ArgoCD instance(s)
+  7. ArgoCD pods status
+  8. OperatorGroup
 
 Exit codes:
   0  - Consistent state (fully installed or fully uninstalled)
@@ -167,6 +168,20 @@ check_csv() {
     else
         fail "No CSV found in '$OPERATOR_NAMESPACE'"
     fi
+}
+
+check_crds() {
+    check "Checking CRDs..."
+    
+    local crd_names=("argoproj.io_argocds" "pipelines.openshift.io_gitopsservices" "argoproj.io_appprojects" "argoproj.io_applications")
+    
+    for crd in "${crd_names[@]}"; do
+        if oc get crd "$crd" &>/dev/null; then
+            pass "CRD '$crd' exists"
+        else
+            fail "CRD '$crd' missing"
+        fi
+    done
 }
 
 check_operator_pods() {
@@ -342,12 +357,14 @@ main() {
     info "Logged in as: $(oc whoami)"
     echo ""
     
-    # Run all checks
+      # Run all checks
     check_namespaces
     echo ""
     check_subscription
     echo ""
     check_csv
+    echo ""
+    check_crds
     echo ""
     check_operator_pods
     echo ""
