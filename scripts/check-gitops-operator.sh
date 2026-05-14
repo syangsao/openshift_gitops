@@ -242,25 +242,28 @@ check_argocd_instance() {
         for instance in $instances; do
             local name
             name=$(echo "$instance" | sed 's|argocd/||')
-            # ArgoCD CR from Red Hat operator uses conditions with types "Established" and "Available"
-            # Check for a condition with type="Available" and status="True"
-            local available_status
-            available_status=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
-            if [ "$available_status" = "True" ]; then
-                pass "ArgoCD instance '$name' is Available"
-            elif [ "$available_status" = "False" ]; then
-                fail "ArgoCD instance '$name' is not Available"
+
+            # ArgoCD CR from Red Hat operator uses a "Reconciled" condition.
+            # When Reconciled=True the operator has processed the CR, but pods may
+            # still be starting up. We combine that with a pod check for accuracy.
+            local reconciled
+            reconciled=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Reconciled")].status}' 2>/dev/null || echo "")
+
+            # Count ArgoCD server pods that are Running
+            local server_running
+            server_running=$(oc get pods -n "$GITOPS_NAMESPACE" -l app.kubernetes.io/name=argocd-server --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
+
+            if [ "$reconciled" = "True" ] && [ "$server_running" -gt 0 ]; then
+                pass "ArgoCD instance '$name' is Ready"
+            elif [ "$reconciled" = "True" ]; then
+                warn "ArgoCD instance '$name' is Reconciled but ArgoCD pods are not yet Running"
+                pass "ArgoCD instance '$name' exists (deploying)"
+            elif [ "$reconciled" = "False" ]; then
+                fail "ArgoCD instance '$name' is not Reconciled"
             else
-                # No Available condition yet — instance is being deployed
-                local established
-                established=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || echo "")
                 local msg
                 msg=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[0].message}' 2>/dev/null || echo "")
-                if [ "$established" = "True" ]; then
-                    warn "ArgoCD instance '$name' is Established but not yet Available (msg: $msg)"
-                else
-                    warn "ArgoCD instance '$name' has no Available condition yet (msg: $msg)"
-                fi
+                warn "ArgoCD instance '$name' has no Reconciled condition yet (msg: $msg)"
                 pass "ArgoCD instance '$name' exists (deploying)"
             fi
         done
