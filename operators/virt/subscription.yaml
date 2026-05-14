@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: kubevirt-hypershift
+  namespace: openshift-virtualization-operator
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: kubevirt-hypershift
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

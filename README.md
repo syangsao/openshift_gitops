@@ -7,13 +7,16 @@ This repository contains manifests, guides, and automation scripts for managing 
 - **`guides/`** - Step-by-step installation and configuration guides
   - `01-install-gitops-operator.md` - Installing the GitOps operator via CLI
   - `02-install-nmstate-via-gitops.md` - Managing nmstate operator through Argo CD
+  - `03-install-virt-via-gitops.md` - Managing Virtualization (KubeVirt Hypershift) operator through Argo CD
 - **`scripts/`** - Automation scripts
   - `check-gitops-operator.sh` - Verify the status of the GitOps operator installation
   - `install-gitops-operator.sh` - Automated GitOps operator installation with verification
   - `uninstall-gitops-operator.sh` - Automated removal of the GitOps operator and all related resources
 - **`operators/`** - Kubernetes manifests for operator deployments
   - `gitops/` - Namespace, OperatorGroup, and Subscription for the GitOps operator
-  - `nmstate/` - Namespace, OperatorGroup, Subscription, and NMState instance manifests
+  - `nmstate/` - Namespace, OperatorGroup, and Subscription for the nmstate operator
+  - `nmstate-instance/` - NMState custom resource
+  - `virt/` - Namespace, OperatorGroup, and Subscription for the Virtualization operator
   - `argocd-applications/` - Argo CD Application resources for GitOps management
 
 ## Prerequisites
