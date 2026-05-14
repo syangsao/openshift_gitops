@@ -254,6 +254,14 @@ main() {
     wait_for_pods "$OPERATOR_NAMESPACE"
     wait_for_argocd
 
+    # Apply NMState RBAC so ArgoCD can manage NMState resources
+    local rbac_file="${OPERATORS_DIR}/argocd-applications/nmstate-rbac.yaml"
+    if [ -f "$rbac_file" ]; then
+        check "Applying NMState RBAC for ArgoCD..."
+        oc apply -f "$rbac_file"
+        info "NMState RBAC applied."
+    fi
+
     echo ""
     echo "========================================"
     info "GitOps operator installed successfully!"
