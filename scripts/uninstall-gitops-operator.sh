@@ -55,11 +55,12 @@ The script will:
   1. Validate prerequisites (oc CLI, login, cluster-admin role)
   2. Delete ArgoCD instances in all namespaces
   3. Delete the Operator Subscription
-  4. Wait for the CSV to be removed
-  5. Wait for operator pods to terminate
-  6. Delete the OperatorGroup
-  7. Delete the operator namespace
-  8. Verify cleanup
+  4. Delete the ClusterServiceVersion (CSV)
+  5. Wait for the CSV to be removed
+  6. Wait for operator pods to terminate
+  7. Delete the OperatorGroup
+  8. Delete the operator and gitops namespaces
+  9. Verify cleanup
 
 WARNING: This operation is irreversible. All ArgoCD instances and operator
 resources will be permanently deleted.
@@ -262,6 +263,31 @@ delete_subscription() {
     done
 }
 
+delete_csv() {
+    check "Deleting ClusterServiceVersion (CSV)..."
+    
+    local csvs
+    csvs=$(oc get csv -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null || echo "")
+    
+    if [ -z "$csvs" ]; then
+        info "No CSV found in '$OPERATOR_NAMESPACE'. Skipping."
+        return 0
+    fi
+    
+    for csv in $csvs; do
+        local name
+        name=$(echo "$csv" | sed 's|clusterserviceversion.operators.coreos.com/||')
+        dry "Deleting CSV '$name' in '$OPERATOR_NAMESPACE'..."
+        if [ "$DRY_RUN" != true ]; then
+            if oc delete csv "$name" -n "$OPERATOR_NAMESPACE" 2>/dev/null; then
+                info "Deleted CSV '$name'."
+            else
+                warn "Failed to delete CSV '$name'."
+            fi
+        fi
+    done
+}
+
 wait_for_csv_removal() {
     check "Waiting for CSV to be removed (timeout: ${CSV_TIMEOUT}s)..."
     
@@ -433,6 +459,16 @@ verify_cleanup() {
         info "No subscriptions remaining."
     fi
     
+    # Check for remaining CSVs
+    local csvs
+    csvs=$(oc get csv -n "$OPERATOR_NAMESPACE" -o name 2>/dev/null || echo "")
+    if [ -n "$csvs" ]; then
+        warn "Remaining CSVs: $csvs"
+        errors=$((errors + 1))
+    else
+        info "No CSVs remaining."
+    fi
+    
     if [ "$errors" -eq 0 ]; then
         info "Cleanup verified - all resources removed successfully."
     else
@@ -499,10 +535,13 @@ main() {
     # Step 2: Delete subscription
     delete_subscription
     
-    # Step 3: Wait for CSV removal
+    # Step 3: Delete CSV explicitly (OLM does not always auto-delete it)
+    delete_csv
+    
+    # Step 4: Wait for CSV removal
     wait_for_csv_removal
     
-    # Step 4: Wait for operator pods to terminate
+    # Step 5: Wait for operator pods to terminate
     wait_for_pods_terminated "$OPERATOR_NAMESPACE"
     wait_for_pods_terminated "$GITOPS_NAMESPACE"
     
