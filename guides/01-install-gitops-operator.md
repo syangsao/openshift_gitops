@@ -143,6 +143,14 @@ argocd login openshift-gitops-server-openshift-gitops.apps.YOUR_DOMAIN \
 >   --grpc-web-root-path / \
 >   --skip-test-tls
 > ```
+>
+> **Tip:** To avoid typing `--grpc-web --grpc-web-root-path /` on every command, create a shell alias:
+>
+> ```bash
+> alias argocd='argocd --grpc-web --grpc-web-root-path /'
+> ```
+>
+> Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent. This applies to all `argocd` commands except `argocd login`, which also needs `--skip-test-tls`.
 
 Or access the Argo CD UI via the route:
 
