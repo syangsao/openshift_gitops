@@ -55,8 +55,10 @@ The script will:
   4. Apply the Subscription
   5. Wait for the CSV to reach Succeeded phase
   6. Wait for all pods in openshift-gitops and openshift-gitops-operator namespaces
-  7. Wait for the ArgoCD instance to be created and Established
-  8. Print the admin password retrieval command
+  7. Wait for the ArgoCD instance to be created
+  8. Display the Argo CD UI URL, admin password, and login command
+
+Requires 'jq' to be installed to retrieve the admin password.
 
 EOF
     exit 0
@@ -258,16 +260,62 @@ main() {
     echo "========================================"
     echo ""
 
-    # Post-install info
-    info "Retrieve the Argo CD admin password with:"
-    echo "  oc get secret openshift-gitops-cluster -n $GITOPS_NAMESPACE -o jsonpath='{.data.admin.password}' | base64 -d"
-    echo ""
-    info "Access the Argo CD UI with:"
-    echo "  oc get route openshift-gitops-server -n $GITOPS_NAMESPACE"
-    echo ""
-    info "Log in to Argo CD CLI with:"
-    echo "  argocd login <ARGOCD_ROUTE> --username admin --password <PASSWORD>"
-    echo ""
+    # Post-install info — fetch actual values
+    info "Retrieving Argo CD admin credentials..."
+    
+    # Fetch the admin password using jq (handles dotted keys correctly)
+    local admin_password=""
+    if command -v jq &>/dev/null; then
+        admin_password=$(oc get secret openshift-gitops-cluster -n "$GITOPS_NAMESPACE" -o json | jq -r '.data["admin.password"]' | base64 -d 2>/dev/null || echo "")
+    fi
+    
+    # Fetch the ArgoCD route — check TLS termination to determine scheme
+    local route_url=""
+    local route_host=""
+    local tls_termination=""
+    route_host=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    tls_termination=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.tls.termination}' 2>/dev/null || echo "none")
+    
+    if [ -n "$route_host" ]; then
+        # Use https if TLS termination is configured, otherwise http
+        if [ "$tls_termination" != "none" ] && [ "$tls_termination" != "" ]; then
+            route_url="https://$route_host"
+        else
+            route_url="http://$route_host"
+        fi
+    fi
+    
+    if [ -n "$route_url" ]; then
+        info "Argo CD UI is available at: $route_url"
+        echo ""
+    else
+        info "Could not determine Argo CD route URL."
+        info "Try manually:"
+        echo "  oc get route openshift-gitops-server -n $GITOPS_NAMESPACE"
+        echo ""
+    fi
+    
+    if [ -n "$admin_password" ]; then
+        info "Argo CD admin password:"
+        echo "  $admin_password"
+        echo ""
+    else
+        info "Could not retrieve admin password automatically."
+        info "Try manually:"
+        echo "  oc get secret openshift-gitops-cluster -n $GITOPS_NAMESPACE -o json | jq -r '.data[\"admin.password\"]' | base64 -d"
+        echo ""
+    fi
+    
+    # Show the complete login command with actual values
+    if [ -n "$route_url" ] && [ -n "$admin_password" ]; then
+        info "Log in to Argo CD CLI with:"
+        echo "  argocd login $route_url --username admin --password '$admin_password'"
+        echo ""
+    elif [ -n "$route_url" ]; then
+        info "Log in to Argo CD CLI with:"
+        echo "  argocd login $route_url --username admin --password <PASSWORD>"
+        echo ""
+    fi
 }
 
 main "$@"
