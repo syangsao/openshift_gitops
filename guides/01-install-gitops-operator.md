@@ -109,14 +109,40 @@ This should show the default ArgoCD instance (typically named `openshift-gitops`
 ### Retrieve the Argo CD admin password
 
 ```bash
-oc get secret openshift-gitops-cluster -n openshift-gitops -o jsonpath='{.data.admin.password}' | base64 -d
+oc get secret openshift-gitops-cluster -n openshift-gitops -o json | jq -r '.data["admin.password"]' | base64 -d
 ```
+
+> **Note:** Use `jq` to extract the password — `jsonpath` bracket notation is unreliable for keys containing dots like `admin.password`.
 
 ### Log in to Argo CD
 
 ```bash
-argocd login $(oc route -n openshift-gitops get route openshift-gitops-server) --username admin --password <PASSWORD>
+argocd login openshift-gitops-server-openshift-gitops.apps.YOUR_DOMAIN \
+  --username admin \
+  --password '<PASSWORD>' \
+  --grpc-web \
+  --grpc-web-root-path / \
+  --skip-test-tls
 ```
+
+> **Note:** Use `--grpc-web` because OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for native gRPC — without it the CLI will hang.
+>
+> Replace the hostname with your actual Argo CD route:
+>
+> ```bash
+> oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}'
+> ```
+>
+> You can also fetch it inline:
+>
+> ```bash
+> argocd login $(oc get route openshift-gitops-server -n openshift-gitops -o jsonpath='{.spec.host}') \
+>   --username admin \
+>   --password '<PASSWORD>' \
+>   --grpc-web \
+>   --grpc-web-root-path / \
+>   --skip-test-tls
+> ```
 
 Or access the Argo CD UI via the route:
 
@@ -131,9 +157,9 @@ oc get route openshift-gitops-server -n openshift-gitops
 | CSV phase | `oc get csv -n openshift-gitops-operator -o jsonpath='{.items[0].status.phase}'` |
 | GitOps pods | `oc get pods -n openshift-gitops` |
 | Operator pods | `oc get pods -n openshift-gitops-operator` |
-| ArgoCD instance | `oc get argocd -n openshift-gitops` |
-| Admin password | `oc get secret openshift-gitops-cluster -n openshift-gitops -o jsonpath='{.data.admin.password}' \| base64 -d` |
-| ArgoCD route | `oc get route openshift-gitops-server -n openshift-gitops` |
+|| ArgoCD instance | `oc get argocd -n openshift-gitops` |
+|| Admin password | `oc get secret openshift-gitops-cluster -n openshift-gitops -o json \| jq -r '.data["admin.password"]' \| base64 -d` |
+|| ArgoCD route | `oc get route openshift-gitops-server -n openshift-gitops` |
 
 ## Sizing Requirements
 
