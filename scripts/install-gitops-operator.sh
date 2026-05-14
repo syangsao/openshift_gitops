@@ -300,13 +300,25 @@ main() {
     fi
     
     # Show the complete login command with actual values
+    # OpenShift reencrypt routes don't negotiate HTTP/2 ALPN for gRPC — the
+    # CLI hangs waiting for native gRPC. Use --grpc-web to route over HTTP/1.1.
     if [ -n "$route_host" ] && [ -n "$admin_password" ]; then
         info "Log in to Argo CD CLI with:"
-        echo "  argocd login $route_url --username admin --password '$admin_password' --insecure"
+        echo "  argocd login $route_host \\"
+        echo "    --username admin \\"
+        echo "    --password '$admin_password' \\"
+        echo "    --grpc-web \\"
+        echo "    --grpc-web-root-path / \\"
+        echo "    --skip-test-tls"
         echo ""
     elif [ -n "$route_host" ]; then
         info "Log in to Argo CD CLI with:"
-        echo "  argocd login $route_url --username admin --password <PASSWORD> --insecure"
+        echo "  argocd login $route_host \\"
+        echo "    --username admin \\"
+        echo "    --password <PASSWORD> \\"
+        echo "    --grpc-web \\"
+        echo "    --grpc-web-root-path / \\"
+        echo "    --skip-test-tls"
         echo ""
     fi
 }
