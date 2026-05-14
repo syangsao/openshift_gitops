@@ -269,12 +269,22 @@ main() {
         admin_password=$(oc get secret openshift-gitops-cluster -n "$GITOPS_NAMESPACE" -o json | jq -r '.data["admin.password"]' | base64 -d 2>/dev/null || echo "")
     fi
     
-    # Fetch the ArgoCD route URL
-    local route_url=""
-    route_url=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    # Fetch the ArgoCD route URL and TLS termination type
+    local route_host=""
+    local route_tls=""
+    route_host=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    route_tls=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.tls.termination}' 2>/dev/null || echo "")
     
-    if [ -n "$route_url" ]; then
-        info "Argo CD UI is available at: https://$route_url"
+    # Determine scheme based on TLS termination
+    local scheme="http"
+    if [ -n "$route_tls" ]; then
+        scheme="https"
+    fi
+    
+    local route_url="${scheme}://${route_host}"
+    
+    if [ -n "$route_host" ]; then
+        info "Argo CD UI is available at: $route_url"
         echo ""
     fi
     
@@ -290,13 +300,13 @@ main() {
     fi
     
     # Show the complete login command with actual values
-    if [ -n "$route_url" ] && [ -n "$admin_password" ]; then
+    if [ -n "$route_host" ] && [ -n "$admin_password" ]; then
         info "Log in to Argo CD CLI with:"
-        echo "  argocd login https://$route_url --username admin --password '$admin_password' --insecure"
+        echo "  argocd login $route_url --username admin --password '$admin_password' --insecure"
         echo ""
-    elif [ -n "$route_url" ]; then
+    elif [ -n "$route_host" ]; then
         info "Log in to Argo CD CLI with:"
-        echo "  argocd login https://$route_url --username admin --password <PASSWORD> --insecure"
+        echo "  argocd login $route_url --username admin --password <PASSWORD> --insecure"
         echo ""
     fi
 }
