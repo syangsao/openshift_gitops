@@ -29,7 +29,7 @@ The operator manifests are in `operators/virt/`:
 
 - `namespace.yaml` – Creates the `openshift-virtualization-operator` namespace
 - `operator-group.yaml` – Configures the operator group (unscoped — no `targetNamespaces`, so OLM can resolve the catalog source in `openshift-marketplace`)
-- `subscription.yaml` – Subscribes to `kubevirt-hypershift` from Red Hat operators
+- `subscription.yaml` – Subscribes to `openshift-virtualization-operator` from Red Hat operators (standard OCP — not the `kubevirt-hypershift` package which requires a Hypershift cluster)
 
 The HyperConverged instance is in `operators/virt-instance/`:
 
