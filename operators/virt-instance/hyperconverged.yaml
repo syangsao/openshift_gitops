@@ -1,0 +1,16 @@
+apiVersion: kubevirt.io/v1
+kind: HyperConverged
+metadata:
+  name: kubevirt
+  namespace: openshift-virtualization-operator
+spec:
+  liveMigrationConfig:
+    completionTimeoutPerMiB: 800000
+    parallel: 2
+  certificateRotateStrategy: {}
+  handlers: {}
+  workloads:
+    allowedWorkloads:
+      - BareMetalHost
+      - VirtualMachine
+  snapshotOperatorDeploy: true
