@@ -77,6 +77,13 @@ The script checks for:
   7. ArgoCD pods status
   8. OperatorGroup
 
+When ArgoCD is running, the script also displays:
+  - The Argo CD UI URL
+  - The admin password (requires 'jq')
+  - The argocd CLI login command
+
+Requires 'jq' to be installed to retrieve the admin password.
+
 Exit codes:
   0  - Consistent state (fully installed or fully uninstalled)
   1  - Inconsistent state (partial install/uninstall)
@@ -323,6 +330,79 @@ check_operator_group() {
     fi
 }
 
+show_argocd_credentials() {
+    # Only show credentials when the GitOps namespace has running pods.
+    # Label selectors can vary across versions — checking for any running
+    # pod in the namespace is more reliable.
+    local running_pods
+    running_pods=$(oc get pods -n "$GITOPS_NAMESPACE" --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
+    if [ "$running_pods" -eq 0 ]; then
+        return
+    fi
+
+    # Fetch the route host and TLS termination
+    local route_host=""
+    local route_tls=""
+    route_host=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    route_tls=$(oc get route openshift-gitops-server -n "$GITOPS_NAMESPACE" -o jsonpath='{.spec.tls.termination}' 2>/dev/null || echo "")
+
+    # Determine scheme
+    local scheme="http"
+    if [ -n "$route_tls" ]; then
+        scheme="https"
+    fi
+
+    local route_url="${scheme}://${route_host}"
+
+    # Fetch admin password (requires jq)
+    local admin_password=""
+    if command -v jq &>/dev/null; then
+        admin_password=$(oc get secret openshift-gitops-cluster -n "$GITOPS_NAMESPACE" -o json | jq -r '.data["admin.password"]' | base64 -d 2>/dev/null || echo "")
+    fi
+
+    echo ""
+    echo "========================================"
+    info "Argo CD Access Information"
+    echo "========================================"
+    echo ""
+
+    if [ -n "$route_host" ]; then
+        info "Argo CD UI URL: $route_url"
+        echo ""
+    fi
+
+    if [ -n "$admin_password" ]; then
+        info "Argo CD admin password:"
+        echo "  $admin_password"
+        echo ""
+    else
+        info "Could not retrieve admin password automatically."
+        info "Retrieve it manually:"
+        echo "  oc get secret openshift-gitops-cluster -n $GITOPS_NAMESPACE -o json | jq -r '.data[\"admin.password\"]' | base64 -d"
+        echo ""
+    fi
+
+    if [ -n "$route_host" ]; then
+        info "Log in to Argo CD CLI:"
+        if [ -n "$admin_password" ]; then
+            echo "  argocd login $route_host \\"
+            echo "    --username admin \\"
+            echo "    --password '$admin_password' \\"
+            echo "    --grpc-web \\"
+            echo "    --grpc-web-root-path / \\"
+            echo "    --skip-test-tls"
+        else
+            echo "  argocd login $route_host \\"
+            echo "    --username admin \\"
+            echo "    --password <PASSWORD> \\"
+            echo "    --grpc-web \\"
+            echo "    --grpc-web-root-path / \\"
+            echo "    --skip-test-tls"
+        fi
+        echo ""
+    fi
+}
+
 # ─── State Analysis ────────────────────────────────────────────────────────────
 
 analyze_state() {
@@ -405,6 +485,9 @@ main() {
     echo ""
     check_operator_group
     echo ""
+    
+    # Show ArgoCD access info if server is running
+    show_argocd_credentials
     
     # Analyze and report
     analyze_state
