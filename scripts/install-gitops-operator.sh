@@ -270,6 +270,14 @@ main() {
         info "Virtualization RBAC applied."
     fi
 
+    # Apply QNAP CSI RBAC so ArgoCD can manage Trident resources
+    local qnap_rbac_file="${OPERATORS_DIR}/argocd-applications/qnap-csi-rbac.yaml"
+    if [ -f "$qnap_rbac_file" ]; then
+        check "Applying QNAP CSI RBAC for ArgoCD..."
+        oc apply -f "$qnap_rbac_file"
+        info "QNAP CSI RBAC applied."
+    fi
+
     echo ""
     echo "========================================"
     info "GitOps operator installed successfully!"
