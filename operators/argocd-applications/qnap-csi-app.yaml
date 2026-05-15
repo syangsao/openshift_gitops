@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: qnap-csi
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/syangsao/openshift_gitops.git'
+    targetRevision: main
+    path: operators/qnap-csi
+    kustomize: {}
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: trident
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
