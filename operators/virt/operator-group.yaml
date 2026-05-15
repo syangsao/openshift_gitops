@@ -3,6 +3,3 @@ kind: OperatorGroup
 metadata:
   name: openshift-virtualization-operator
   namespace: openshift-virtualization-operator
-spec:
-  targetNamespaces:
-  - openshift-virtualization-operator

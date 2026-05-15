@@ -3,6 +3,3 @@ kind: OperatorGroup
 metadata:
   name: openshift-nmstate
   namespace: openshift-nmstate
-spec:
-  targetNamespaces:
-  - openshift-nmstate

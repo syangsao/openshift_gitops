@@ -28,7 +28,7 @@ This two-app approach avoids a sync hang: the `HyperConverged` CRD is created by
 The operator manifests are in `operators/virt/`:
 
 - `namespace.yaml` – Creates the `openshift-virtualization-operator` namespace
-- `operator-group.yaml` – Configures the operator group
+- `operator-group.yaml` – Configures the operator group (unscoped — no `targetNamespaces`, so OLM can resolve the catalog source in `openshift-marketplace`)
 - `subscription.yaml` – Subscribes to `kubevirt-hypershift` from Red Hat operators
 
 The HyperConverged instance is in `operators/virt-instance/`:
@@ -198,6 +198,6 @@ After the virtualization operator and HyperConverged instance are installed, you
 | Application shows `Missing` | Verify the Git repo URL in the Application manifest is correct and accessible |
 | Pods not starting | Check `oc describe pod -n openshift-virtualization-operator` for events and errors |
 | Sync fails | Run `argocd app diff virt-operator` to identify configuration differences |
-| Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-virtualization-operator` |
+| Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-virtualization-operator`. Also ensure the `OperatorGroup` does **not** use `targetNamespaces` — it must be unscoped so OLM can resolve the `redhat-operators` catalog in `openshift-marketplace` |
 | RBAC forbidden error | Apply `virt-rbac.yaml` before deploying the instance app |
 | `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags, or create a shell alias |
