@@ -17,7 +17,8 @@ This repository contains manifests, guides, and automation scripts for managing 
   - `nmstate/` - Namespace, OperatorGroup, and Subscription for the nmstate operator
   - `nmstate-instance/` - NMState custom resource
   - `virt/` - Namespace, OperatorGroup, and Subscription for the Virtualization operator
-  - `argocd-applications/` - Argo CD Application resources for GitOps management
+  - `virt-instance/` - HyperConverged custom resource for Virtualization
+  - `argocd-applications/` - Argo CD Application resources and RBAC bindings
 
 ## Prerequisites
 

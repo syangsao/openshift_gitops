@@ -262,6 +262,14 @@ main() {
         info "NMState RBAC applied."
     fi
 
+    # Apply Virtualization RBAC so ArgoCD can manage HyperConverged resources
+    local virt_rbac_file="${OPERATORS_DIR}/argocd-applications/virt-rbac.yaml"
+    if [ -f "$virt_rbac_file" ]; then
+        check "Applying Virtualization RBAC for ArgoCD..."
+        oc apply -f "$virt_rbac_file"
+        info "Virtualization RBAC applied."
+    fi
+
     echo ""
     echo "========================================"
     info "GitOps operator installed successfully!"
