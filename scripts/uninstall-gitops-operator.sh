@@ -24,6 +24,7 @@ POD_TIMEOUT=300  # seconds to wait for pods to terminate
 POLL_INTERVAL=10  # seconds between polls
 DRY_RUN=false
 DELETE_CRDS=false
+AUTO_YES=false
 
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +37,27 @@ error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 check()   { echo -e "${GREEN}[CHECK]${NC} $*"; }
 dry()     { if [ "$DRY_RUN" = true ]; then echo -e "${BLUE}[DRY-RUN]${NC} Would: $*"; else echo -e "${BLUE}[ACTION]${NC} $*"; fi; }
 
+confirm_proceed() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    warn "This will permanently delete:"
+    echo "  • All ArgoCD instances across the cluster"
+    echo "  • The OpenShift GitOps operator subscription"
+    echo "  • Namespaces: $OPERATOR_NAMESPACE, $GITOPS_NAMESPACE"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    read -r -p "Are you sure you want to proceed? [y/N] " response
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            info "Confirmation received. Proceeding with uninstallation."
+            ;;
+        *)
+            info "Uninstallation cancelled by user."
+            exit 0
+            ;;
+    esac
+}
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -46,6 +68,7 @@ from the cluster.
 Options:
   --dry-run    Show what would be removed without actually deleting.
   --delete-crds  Also delete the CRDs (use with caution - see below).
+  --yes, -y    Skip the confirmation prompt (for scripting/automation).
   --help, -h   Show this help message and exit.
 
 CRDs are cluster-scoped resources that define ArgoCD custom resource types.
@@ -475,6 +498,7 @@ main() {
         case "$arg" in
             --dry-run) DRY_RUN=true ;;
             --delete-crds) DELETE_CRDS=true ;;
+            --yes|-y) AUTO_YES=true ;;
             --help|-h) usage ;;
         esac
     done
@@ -505,6 +529,12 @@ main() {
     # Pre-flight
     check_gitops_installed
     echo ""
+    
+    # Ask for confirmation (skip in dry-run mode or with --yes flag)
+    if [ "$DRY_RUN" != true ] && [ "$AUTO_YES" != true ]; then
+        confirm_proceed
+    fi
+    
     info "Starting GitOps operator uninstallation..."
     echo ""
     
