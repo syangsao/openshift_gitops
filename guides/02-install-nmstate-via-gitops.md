@@ -54,9 +54,19 @@ oc get csv -n openshift-nmstate -o jsonpath='{.items[0].status.phase}'
 
 The operator is ready when all pods are `Running` and the CSV phase is `Succeeded`.
 
+### Apply RBAC for ArgoCD
+
+Before deploying the instance app, grant ArgoCD permission to manage NMState resources:
+
+```bash
+oc apply -f operators/argocd-applications/nmstate-rbac.yaml
+```
+
+This creates a ClusterRole and ClusterRoleBinding so the ArgoCD application controller can create `NMState` resources at the cluster scope.
+
 ## Step 4: Deploy the NMState Instance
 
-Once the operator is running, apply the instance app:
+Once the operator is running and RBAC is applied, create the instance app:
 
 ```bash
 oc apply -f operators/argocd-applications/nmstate-instance-app.yaml
@@ -175,4 +185,5 @@ This app manages a plain CR, not an OLM Subscription. Deleting the app **without
 | Pods not starting | Check `oc describe pod -n openshift-nmstate` for events and errors |
 | Sync fails | Run `argocd app diff nmstate-operator --grpc-web --grpc-web-root-path /` to identify differences |
 | Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
-|| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags, or create a shell alias |
+| RBAC forbidden error | Apply `nmstate-rbac.yaml` before deploying the instance app |
+| `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags, or create a shell alias |
