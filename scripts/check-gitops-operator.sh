@@ -256,9 +256,11 @@ check_argocd_instance() {
             local reconciled
             reconciled=$(oc get argocd "$name" -n "$GITOPS_NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Reconciled")].status}' 2>/dev/null || echo "")
 
-            # Count ArgoCD server pods that are Running
+            # Count running pods in the GitOps namespace.
+            # Label selectors can vary across versions — checking all running
+            # pods is more reliable than a specific label.
             local server_running
-            server_running=$(oc get pods -n "$GITOPS_NAMESPACE" -l app.kubernetes.io/name=argocd-server --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
+            server_running=$(oc get pods -n "$GITOPS_NAMESPACE" --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
 
             if [ "$reconciled" = "True" ] && [ "$server_running" -gt 0 ]; then
                 pass "ArgoCD instance '$name' is Ready"
@@ -331,10 +333,12 @@ check_operator_group() {
 }
 
 show_argocd_credentials() {
-    # Only show credentials when ArgoCD is running
-    local server_running
-    server_running=$(oc get pods -n "$GITOPS_NAMESPACE" -l app.kubernetes.io/name=argocd-server --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
-    if [ "$server_running" -eq 0 ]; then
+    # Only show credentials when the GitOps namespace has running pods.
+    # Label selectors can vary across versions — checking for any running
+    # pod in the namespace is more reliable.
+    local running_pods
+    running_pods=$(oc get pods -n "$GITOPS_NAMESPACE" --no-headers 2>/dev/null | awk '$3=="Running"{c++} END{print c+0}')
+    if [ "$running_pods" -eq 0 ]; then
         return
     fi
 
