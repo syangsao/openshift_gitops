@@ -6,6 +6,6 @@ metadata:
 spec:
   channel: stable
   installPlanApproval: Automatic
-  name: kubevirt-hypershift
+  name: openshift-virtualization-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
