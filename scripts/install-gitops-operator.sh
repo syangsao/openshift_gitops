@@ -176,7 +176,7 @@ wait_for_pods() {
     local elapsed=0
     while [ "$elapsed" -lt "$POD_TIMEOUT" ]; do
         local failing
-        failing=$(oc get pods -n "$namespace" --no-headers 2>/dev/null | awk '$2 !~ /Running|Completed/ {print $1, $2}' || echo "")
+        failing=$(oc get pods -n "$namespace" --no-headers 2>/dev/null | awk '$3 !~ /Running|Completed/ {print $1, $3}' || echo "")
         if [ -z "$failing" ]; then
             info "All pods in '${namespace}' are Running."
             return 0
