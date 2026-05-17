@@ -1,0 +1,46 @@
+# NFS CSI External Snapshotter Controller
+# CRDs (VolumeSnapshotClass, VolumeSnapshot, VolumeSnapshotContent)
+# are assumed to be pre-installed on the cluster.
+# externalSnapshotter.customResourceDefinitions.enabled=false
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-csi-snapshot-controller
+  namespace: csi-driver-nfs
+  labels:
+    app: nfs-csi-driver
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: nfs-csi-driver
+      role: nfs-csi-snapshot-controller
+  template:
+    metadata:
+      labels:
+        app: nfs-csi-driver
+        role: nfs-csi-snapshot-controller
+    spec:
+      serviceAccountName: csi-nfs-snapshot-sa
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: external-snapshotter
+          image: "registry.k8s.io/sig-storage/external-snapshotter/v6.3.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--leader-election-type=lease"
+            - "--leader-election-namespace=$(POD_NAMESPACE)"
+            - "--v=5"
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
