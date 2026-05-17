@@ -9,6 +9,7 @@ This repository contains manifests, guides, and automation scripts for managing 
   - `02-install-nmstate-via-gitops.md` - Managing nmstate operator through Argo CD
   - `03-install-virt-via-gitops.md` - Managing Virtualization (KubeVirt Hypershift) operator through Argo CD
   - `04-install-qnap-csi-via-gitops.md` - Deploying the QNAP CSI Driver through Argo CD
+  - `05-install-nfs-csi-via-gitops.md` - Deploying the NFS CSI Driver through Argo CD
 - **`scripts/`** - Automation scripts
   - `check-gitops-operator.sh` - Verify the status of the GitOps operator installation
   - `install-gitops-operator.sh` - Automated GitOps operator installation with verification
@@ -20,6 +21,7 @@ This repository contains manifests, guides, and automation scripts for managing 
   - `virt/` - Namespace, OperatorGroup, and Subscription for the Virtualization operator
   - `virt-instance/` - HyperConverged custom resource for Virtualization
   - `qnap-csi/` - QNAP CSI Driver (Trident-based) manifests for NAS storage
+  - `nfs-csi/` - NFS CSI Driver (upstream Kubernetes) manifests for generic NFS storage
   - `argocd-applications/` - Argo CD Application resources and RBAC bindings
 
 ## Prerequisites

@@ -1,0 +1,161 @@
+# NFS CSI Controller Deployment
+# runOnControlPlane=true: tolerates master taints, no nodeSelector/antiAffinity
+# replicas=2, strategy=RollingUpdate
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-csi-controller
+  namespace: csi-driver-nfs
+  labels:
+    app: nfs-csi-driver
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: nfs-csi-driver
+      role: nfs-csi-controller
+  template:
+    metadata:
+      labels:
+        app: nfs-csi-driver
+        role: nfs-csi-controller
+    spec:
+      serviceAccountName: csi-nfs-controller-sa
+      # runOnControlPlane=true: allow scheduling on control-plane nodes
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        # NFS CSI Driver Container
+        - name: nfs-provisioner
+          image: "registry.k8s.io/sig-storage/nfs-provisioner:v4.11.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--nodeid=$(NODE_ID)"
+            - "--v=5"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /etc/secrets
+              name: nfs-secrets
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        # External Provisioner Sidecar
+        - name: external-provisioner
+          image: "registry.k8s.io/sig-storage/external-provisioner:v5.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election-type=lease"
+            - "--leader-election-namespace=$(POD_NAMESPACE)"
+            - "--provisioner=nfs.csi.k8s.io"
+            - "--extra-create-metadata"
+            - "--feature-gates=WatchProvisionedVolumes=true"
+          env:
+            - name: ADDRESS
+              value: "/csi/csi.sock"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        # External Resizer Sidecar
+        - name: external-resizer
+          image: "registry.k8s.io/sig-storage/external-resizer:v1.13.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election-type=lease"
+            - "--leader-election-namespace=$(POD_NAMESPACE)"
+            - "--handle-volume-inuse-error=true"
+            - "--provisioner=nfs.csi.k8s.io"
+          env:
+            - name: ADDRESS
+              value: "/csi/csi.sock"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        # External Attacher Sidecar
+        - name: external-attacher
+          image: "registry.k8s.io/sig-storage/external-attacher:v4.9.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election-type=lease"
+            - "--leader-election-namespace=$(POD_NAMESPACE)"
+            - "--provisioner=nfs.csi.k8s.io"
+          env:
+            - name: ADDRESS
+              value: "/csi/csi.sock"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: nfs-secrets
+          secret:
+            secretName: csi-nfs-secret
+            optional: true

@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# NFS CSI Driver deployment manifests.
+# Based on: https://github.com/kubernetes-csi/csi-driver-nfs
+# Helm chart: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+# Chart version: 4.11.0
+#
+# Helm values applied:
+#   controller.runOnControlPlane=true
+#   controller.replicas=2
+#   controller.strategyType=RollingUpdate
+#   externalSnapshotter.enabled=true
+#   externalSnapshotter.customResourceDefinitions.enabled=false
+#
+# Install order:
+#   1. namespace.yaml        — creates the 'csi-driver-nfs' namespace
+#   2. rbac.yaml             — ServiceAccounts, ClusterRoles, ClusterRoleBindings
+#   3. controller.yaml       — Controller deployment (2 replicas, RollingUpdate)
+#   4. node.yaml             — Node daemonset
+#   5. external-snapshotter.yaml — External snapshotter controller deployment
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - controller.yaml
+  - node.yaml
+  - external-snapshotter.yaml

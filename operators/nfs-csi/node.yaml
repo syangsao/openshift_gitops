@@ -1,0 +1,106 @@
+# NFS CSI Node DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nfs-csi-node
+  namespace: csi-driver-nfs
+  labels:
+    app: nfs-csi-driver
+spec:
+  selector:
+    matchLabels:
+      app: nfs-csi-driver
+      role: nfs-csi-node
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: nfs-csi-driver
+        role: nfs-csi-node
+    spec:
+      serviceAccountName: csi-nfs-node-sa
+      hostNetwork: false
+      tolerations:
+        - operator: Exists
+      containers:
+        # NFS CSI Driver Node Container
+        - name: nfs-provisioner
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+            readOnlyRootFilesystem: false
+          image: "registry.k8s.io/sig-storage/nfs-provisioner:v4.11.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--nodeid=$(NODE_ID)"
+            - "--v=5"
+          env:
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /var/lib/kubelet
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath: /etc/secrets
+              name: nfs-secrets
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+        # Node Driver Registrar Sidecar
+        - name: node-driver-registrar
+          image: "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--kubelet-registration-path=$(DRIVER_REG_SOCK_PATH)"
+          env:
+            - name: ADDRESS
+              value: "/csi/csi.sock"
+            - name: DRIVER_REG_SOCK_PATH
+              value: "/var/lib/kubelet/plugins/nfs.csi.k8s.io/csi.sock"
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /registration
+              name: registration-dir
+          ports:
+            - containerPort: 9808
+              name: healthz
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: socket-dir
+          emptyDir: {}
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet
+            type: Directory
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: Directory
+        - name: nfs-secrets
+          secret:
+            secretName: csi-nfs-secret
+            optional: true

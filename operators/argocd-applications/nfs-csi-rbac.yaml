@@ -1,0 +1,49 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nfs-csi-argocd-access
+rules:
+# Persistent volume resources managed by NFS CSI driver
+- apiGroups: [""]
+  resources: ["persistentvolumes", "persistentvolumeclaims", "persistentvolumeclaims/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Storage classes
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Volume snapshot resources
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshotclasses", "volumesnapshots", "volumesnapshotcontents", "volumesnapshotcontents/status", "volumesnapshots/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["snap.storage.k8s.io"]
+  resources: ["volumesnapshotclasses", "volumesnapshots", "volumesnapshotcontents", "volumesnapshotcontents/status", "volumesnapshots/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# CSINode resources
+- apiGroups: ["storage.k8s.io"]
+  resources: ["csinodes", "volumeattachments", "volumeattachments/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Deployment and DaemonSet management
+- apiGroups: ["apps"]
+  resources: ["deployments", "daemonsets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Namespace and ServiceAccount management
+- apiGroups: [""]
+  resources: ["namespaces", "serviceaccounts", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# RBAC resources
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nfs-csi-argocd-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nfs-csi-argocd-access
+subjects:
+- kind: ServiceAccount
+  name: openshift-gitops-argocd-application-controller
+  namespace: openshift-gitops
