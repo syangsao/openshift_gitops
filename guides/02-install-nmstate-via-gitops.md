@@ -187,3 +187,4 @@ This app manages a plain CR, not an OLM Subscription. Deleting the app **without
 | Operator not installing | Verify the `Subscription` CSV phase: `oc get csv -n openshift-nmstate` |
 | RBAC forbidden error | Apply `nmstate-rbac.yaml` before deploying the instance app |
 | `argocd` CLI hangs | Use `--grpc-web --grpc-web-root-path /` flags, or create a shell alias |
+| Operator crash: `AllNamespaces InstallModeType not supported` | The `OperatorGroup` needs `spec.targetNamespaces: [openshift-nmstate]` — the nmstate operator only supports `SingleNamespace` install mode and cannot watch all namespaces |
