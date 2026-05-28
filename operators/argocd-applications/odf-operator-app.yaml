@@ -14,7 +14,15 @@ spec:
     namespace: openshift-storage
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    - RespectIgnoreDifferences=true
+  ignoreDifference:
+  - group: operators.coreos.com
+    kind: Subscription
+    jqPath: '.status'
+  - group: operators.coreos.com
+    kind: OperatorGroup
+    jqPath: '.status'

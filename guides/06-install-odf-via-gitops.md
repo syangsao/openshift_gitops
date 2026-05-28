@@ -18,14 +18,10 @@ OpenShift Data Foundation (ODF) in **standalone MCG mode** deploys NooBaa as a S
 - You want S3-compatible object storage for applications (Quay, registry, CI/CD artifacts, etc.)
 - You have NFS or other external storage available as a backing store
 
-The deployment includes:
-1. **ODF Operator** – Subscribes to `odf-operator` from `redhat-operators` catalog
-2. **OCSInitialization** – Initializes OCS/ODF CRDs and common resources
-3. **StorageCluster** – Configures the cluster in external mode with standalone MCG
-4. **NooBaa** – The Multicloud Object Gateway with PostgreSQL database on NFS
-5. **BackingStores** – PV-backed storage pools on NFS (default + custom for Quay)
-6. **BucketClasses** – Placement policies mapping buckets to backing stores
-7. **ObjectBucketClaims** – Pre-provisioned buckets for applications
+The deployment includes three Argo CD Applications:
+1. **ODF Operator** (`odf-operator`) – Subscribes to `odf-operator` from `redhat-operators` catalog
+2. **ODF Instance** (`odf-instance`) – OCSInitialization + StorageCluster (external mode, standalone MCG)
+3. **NooBaa MCG** (`odf-noobaa`) – NooBaa instance, BackingStores, BucketClasses, and ObjectBucketClaims
 
 > **Note:** This guide follows the [Red Hat standalone MCG deployment documentation](https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation/4.19/html-single/deploying_openshift_data_foundation_using_bare_metal_infrastructure/index#deploy-standalone-multicloud-object-gateway).
 
@@ -59,7 +55,7 @@ The deployment includes:
 └─────────────────────────────────────────────────────┘
 ```
 
-> **⚠️ Important for existing installations:** If ODF is already installed manually on your cluster (like the luke cluster), these Argo CD Applications will adopt the existing resources — they won't recreate them. However, you should apply the RBAC first, then the operator app, then the instance app. Argo CD will detect the existing resources and reconcile them to match the Git-defined state. This is a safe adoption process that doesn't disrupt running workloads.
+> **⚠️ Important for existing installations:** If ODF is already installed manually on your cluster (like the luke cluster), these Argo CD Applications will adopt the existing resources — they won't recreate them. Apply them in order: RBAC first, then the operator app, then the instance app, then the noobaa app. Argo CD will detect the existing resources and reconcile them to match the Git-defined state. This is a safe adoption process that doesn't disrupt running workloads.
 
 ## Step 1: Deploy the RBAC for Argo CD
 
@@ -94,6 +90,11 @@ This grants the Argo CD application controller access to:
 |------|-------------|
 | `ocs-initialization.yaml` | OCSInitialization CR (empty spec — operator manages defaults) |
 | `storage-cluster.yaml` | StorageCluster in external mode with standalone MCG |
+
+### NooBaa MCG (`operators/odf-noobaa/`)
+
+| File | Description |
+|------|-------------|
 | `noobaa.yaml` | NooBaa CR with PostgreSQL 16 on NFS, 3-10 endpoints |
 | `backing-store-default.yaml` | Default PV pool backing store (50Gi on NFS) |
 | `backing-store-quay.yaml` | Dedicated backing store for Quay Enterprise |
@@ -157,13 +158,27 @@ This typically takes **5-10 minutes**.
 
 ## Step 4: Deploy the ODF Instance
 
-Once the operator is ready, apply the instance Application:
+Once the operator is ready, apply the instance Application (OCSInitialization + StorageCluster):
 
 ```bash
 oc apply -f operators/argocd-applications/odf-instance-app.yaml
 ```
 
-Argo CD will create the OCSInitialization, StorageCluster, NooBaa, BackingStores, BucketClasses, and ObjectBucketClaim.
+Argo CD will create the OCSInitialization and StorageCluster. Wait for the StorageCluster to reach `Ready` phase:
+
+```bash
+oc get storagecluster ocs-storagecluster -n openshift-storage -w
+```
+
+## Step 5: Deploy NooBaa MCG
+
+Once the StorageCluster is ready, apply the NooBaa Application:
+
+```bash
+oc apply -f operators/argocd-applications/odf-noobaa-app.yaml
+```
+
+Argo CD will create the NooBaa instance, BackingStores, BucketClasses, and ObjectBucketClaim.
 
 ### Expected Deployment Sequence
 
@@ -220,10 +235,12 @@ This typically takes **10-15 minutes** after the operator is ready.
 # Operator application
 argocd app get odf-operator --grpc-web --grpc-web-root-path /
 argocd app get odf-instance --grpc-web --grpc-web-root-path /
+argocd app get odf-noobaa --grpc-web --grpc-web-root-path /
 
 # Check sync status
 argocd app sync-status odf-operator --grpc-web --grpc-web-root-path /
 argocd app sync-status odf-instance --grpc-web --grpc-web-root-path /
+argocd app sync-status odf-noobaa --grpc-web --grpc-web-root-path /
 ```
 
 ### Via `oc` CLI
@@ -288,13 +305,13 @@ s3cmd --access-key=<KEY> --secret-key=<SECRET> \
    oc get route openshift-gitops-server -n openshift-gitops
    ```
 2. Log in and navigate to **Applications**.
-3. Find `odf-operator` and `odf-instance` — both should show **Health** = `Healthy` and **Sync Status** = `Synced`.
+3. Find `odf-operator`, `odf-instance`, and `odf-noobaa` — all three should show **Health** = `Healthy` and **Sync Status** = `Synced`.
 
 ## Configuring Additional Backing Stores
 
 ### Adding a New Backing Store
 
-Create a new backing store manifest in `operators/odf-instance/`:
+Create a new backing store manifest in `operators/odf-noobaa/`:
 
 ```yaml
 apiVersion: noobaa.io/v1alpha1
@@ -358,10 +375,11 @@ The OBC creates a secret with S3 credentials in the same namespace.
 
 ## Upgrading ODF
 
-1. Update the `channel` and/or `startingCSV` in `operators/odf/subscription.yaml` if needed.
-2. Update resource limits in `operators/odf-instance/storage-cluster.yaml` and `operators/odf-instance/noobaa.yaml` if scaling is needed.
-3. Commit and push to Git.
-4. Argo CD will sync the changes.
+1. Update the `channel` in `operators/odf/subscription.yaml` if needed.
+2. Update resource limits in `operators/odf-instance/storage-cluster.yaml` if scaling the core services.
+3. Update NooBaa-specific configs in `operators/odf-noobaa/noobaa.yaml` and backing stores in `operators/odf-noobaa/`.
+4. Commit and push to Git.
+5. Argo CD will sync the changes.
 
 To find the latest ODF version:
 ```bash
@@ -370,20 +388,32 @@ oc packagemanifests odf-operator -n openshift-marketplace
 
 ## Deleting ODF
 
-### Phase 1: Remove Instance Resources
+### Phase 1: Remove NooBaa MCG Resources
 
 ```bash
-# Delete the instance application (cascades to CRs)
-argocd app delete odf-instance --cascade --grpc-web --grpc-web-root-path /
+# Delete the noobaa application first (cascades to CRs)
+argocd app delete odf-noobaa --cascade --grpc-web --grpc-web-root-path /
 ```
 
-Wait for all NooBaa pods and PVCs to be cleaned up:
+Wait for NooBaa pods and PVCs to be cleaned up:
 ```bash
 oc get pods -n openshift-storage -w
 oc get pvc -n openshift-storage
 ```
 
-### Phase 2: Remove Operator
+### Phase 2: Remove ODF Instance
+
+```bash
+# Delete the instance application
+argocd app delete odf-instance --cascade --grpc-web --grpc-web-root-path /
+```
+
+Wait for StorageCluster and OCSInitialization to be cleaned up:
+```bash
+oc get storagecluster -n openshift-storage -w
+```
+
+### Phase 3: Remove Operator
 
 ```bash
 # Delete the operator application
@@ -420,7 +450,7 @@ oc delete namespace openshift-storage --wait=false
 | PVCs not binding | Verify NFS CSI StorageClass: `oc get sc nfs-csidriver3` and test a PVC manually |
 | BackingStore not reaching `OPTIMAL` | Check PVC status: `oc get pvc -n openshift-storage` |
 | S3 endpoint not accessible | Check routes: `oc get routes -n openshift-storage` and DNS resolution |
-| `OutOfSync` in Argo CD | Run `argocd app diff odf-instance --grpc-web --grpc-web-root-path /` to identify differences |
+| `OutOfSync` in Argo CD | Run `argocd app diff odf-noobaa --grpc-web --grpc-web-root-path /` to identify differences |
 | Sync fails with `Forbidden` | Ensure RBAC is applied: `oc apply -f operators/argocd-applications/odf-rbac.yaml` |
 | PostgreSQL connection errors | Check noobaa-db pod logs: `oc logs -n openshift-storage -l noobaa-core=true -c db` |
 | OBC not binding | Verify BucketClass exists and BackingStore is `OPTIMAL` |

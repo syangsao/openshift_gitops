@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: odf-noobaa
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/syangsao/openshift_gitops.git'
+    targetRevision: main
+    path: operators/odf-noobaa
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: openshift-storage
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+    - RespectIgnoreDifferences=true
+  ignoreDifference:
+  - group: noobaa.io
+    kind: NooBaa
+    jqPath: '.metadata'
+  - group: noobaa.io
+    kind: NooBaa
+    jqPath: '.status'
+  - group: noobaa.io
+    kind: NooBaa
+    jqPath: '.spec.dbSpec.image'
+  - group: noobaa.io
+    kind: NooBaa
+    jqPath: '.spec.image'
+  - group: noobaa.io
+    kind: BackingStore
+    jqPath: '.status'
+  - group: noobaa.io
+    kind: BucketClass
+    jqPath: '.status'
+  - group: objectbucket.io
+    kind: ObjectBucketClaim
+    jqPath: '.status.phase'
+  - group: objectbucket.io
+    kind: ObjectBucketClaim
+    jqPath: '.status.bucketName'
+  - group: objectbucket.io
+    kind: ObjectBucketClaim
+    jqPath: '.status.bucketProvisionerOptions'

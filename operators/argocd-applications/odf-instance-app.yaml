@@ -14,5 +14,14 @@ spec:
     namespace: openshift-storage
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
+    syncOptions:
+    - RespectIgnoreDifferences=true
+  ignoreDifference:
+  - group: ocs.openshift.io
+    kind: StorageCluster
+    jqPath: '.status'
+  - group: ocs.openshift.io
+    kind: OCSInitialization
+    jqPath: '.status'

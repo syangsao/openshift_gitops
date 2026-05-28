@@ -33,7 +33,8 @@ spec:
         cpu: "3"
         memory: 4Gi
     dbStorageClass: nfs-csidriver3
-    image: registry.redhat.io/rhel9/postgresql-16
+    image: registry.redhat.io/rhel9/postgresql-16@sha256:745581a8e045ede5e3aaf30502ef40672e5579bf00155a0031c15c18ebe4d970
+  image: registry.redhat.io/odf4/mcg-core-rhel9@sha256:830d232b418552c4a7610c1e0b12a2c03f8c9c821051236d41ac8e4ad1dc06a9
   endpoints:
     maxCount: 10
     minCount: 3
