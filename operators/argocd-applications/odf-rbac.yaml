@@ -1,0 +1,96 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: odf-argocd-access
+rules:
+# OCSInitialization
+- apiGroups: ["ocs.openshift.io"]
+  resources: ["ocsinitializations"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# StorageCluster
+- apiGroups: ["ocs.openshift.io"]
+  resources: ["storageclusters"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# NooBaa, BackingStore, BucketClass
+- apiGroups: ["noobaa.io"]
+  resources: ["noobaas", "backingstores", "bucketclasses", "namespacesstores"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# ObjectBucketClaim
+- apiGroups: ["objectbucket.io"]
+  resources: ["objectbucketclaims", "objectbuckets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Ceph resources (for external mode reconciliation)
+- apiGroups: ["ceph.rook.io"]
+  resources: ["cephclusters", "cephblockpools", "cephfilesystems", "cephobjectstores", "cephobjectstoreusers", "cephclients", "cephnfses", "cephrbdmirrors", "cephfilesystemmirrors", "cephobjectrealms", "cephobjectzones", "cephobjectzonegroups"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# CSI Addons
+- apiGroups: ["csiaddons.openshift.io"]
+  resources: ["csiaddonsnodes", "encryptionkeyrotationcronjobs", "encryptionkeyrotationjobs", "networkfences", "networkfenceclasses", "reclaimspacecronjobs", "reclaimspacejobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Recipe
+- apiGroups: ["ramendr.openshift.io"]
+  resources: ["recipes"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Volume replication
+- apiGroups: ["replication.storage.openshift.io"]
+  resources: ["volumereplicationclasses", "volumereplications", "volumegroupreplicationclasses", "volumegroupreplications"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Storage classes and PVs
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "csinodes", "volumeattachments", "volumeattachments/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumes", "persistentvolumeclaims", "persistentvolumeclaims/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Volume snapshots
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshotclasses", "volumesnapshots", "volumesnapshotcontents", "volumesnapshotcontents/status", "volumesnapshots/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["groupsnapshot.storage.k8s.io"]
+  resources: ["volumegroupsnapshotclasses", "volumegroupsnapshots", "volumegroupsnapshotcontents", "volumegroupsnapshotcontents/status", "volumegroupsnapshots/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Service accounts, secrets, configmaps
+- apiGroups: [""]
+  resources: ["serviceaccounts", "secrets", "configmaps", "services", "pods"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Deployments, DaemonSets, StatefulSets
+- apiGroups: ["apps"]
+  resources: ["deployments", "daemonsets", "statefulsets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# RBAC
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Monitoring
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["servicemonitors", "podmonitors", "prometheusrules"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# PodDisruptionBudgets
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Autoscaling
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Routes
+- apiGroups: ["route.openshift.io"]
+  resources: ["routes"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# SecurityContextConstraints
+- apiGroups: ["security.openshift.io"]
+  resources: ["securitycontextconstraints"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: odf-argocd-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: odf-argocd-access
+subjects:
+- kind: ServiceAccount
+  name: openshift-gitops-argocd-application-controller
+  namespace: openshift-gitops

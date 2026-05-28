@@ -1,0 +1,54 @@
+apiVersion: ocs.openshift.io/v1
+kind: StorageCluster
+metadata:
+  annotations:
+    uninstall.ocs.openshift.io/cleanup-policy: delete
+    uninstall.ocs.openshift.io/mode: graceful
+  name: ocs-storagecluster
+  namespace: openshift-storage
+spec:
+  arbiter: {}
+  encryption:
+    keyRotation:
+      schedule: '@weekly'
+    kms: {}
+  externalStorage: {}
+  managedResources:
+    cephBlockPools: {}
+    cephCluster: {}
+    cephDashboard: {}
+    cephFilesystems: {}
+    cephNonResilientPools: {}
+    cephObjectStoreUsers: {}
+    cephObjectStores: {}
+    cephRBDMirror: {}
+    cephToolbox: {}
+  multiCloudGateway:
+    dbStorageClassName: nfs-csidriver3
+    endpoints:
+      maxCount: 10
+      minCount: 3
+    reconcileStrategy: standalone
+  resourceProfile: balanced
+  resources:
+    noobaa-core:
+      limits:
+        cpu: "3"
+        memory: 4Gi
+      requests:
+        cpu: "3"
+        memory: 4Gi
+    noobaa-db:
+      limits:
+        cpu: "3"
+        memory: 4Gi
+      requests:
+        cpu: "3"
+        memory: 4Gi
+    noobaa-endpoint:
+      limits:
+        cpu: "3"
+        memory: 4Gi
+      requests:
+        cpu: "3"
+        memory: 4Gi

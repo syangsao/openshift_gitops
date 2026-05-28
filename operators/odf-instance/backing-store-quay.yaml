@@ -1,0 +1,19 @@
+apiVersion: noobaa.io/v1alpha1
+kind: BackingStore
+metadata:
+  labels:
+    app: noobaa
+  name: quay-backingstore
+  namespace: openshift-storage
+spec:
+  pvPool:
+    numVolumes: 1
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 4000Mi
+      requests:
+        storage: 50Gi
+    secret: {}
+    storageClass: nfs-csidriver3
+  type: pv-pool
