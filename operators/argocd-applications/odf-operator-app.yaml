@@ -17,7 +17,6 @@ spec:
       prune: false
       selfHeal: true
     syncOptions:
-    - CreateNamespace=true
     - RespectIgnoreDifferences=true
   ignoreDifference:
   - group: operators.coreos.com
@@ -26,3 +25,25 @@ spec:
   - group: operators.coreos.com
     kind: OperatorGroup
     jqPath: '.status'
+  # Override OLM Subscription health check to avoid false Degraded from
+  # CatalogSourcesUnhealthy / ResolutionFailed conditions which are cosmetic
+  # when the operator is actually installed and running.
+  overrides:
+  - group: operators.coreos.com
+    kind: Subscription
+    health.lua: |
+      hs = {status = "Progressing", message = ""}
+      if current.object.status == nil then
+        hs.status = "Progressing"
+        hs.message = "Subscription has no status yet"
+      elseif current.object.status.state == "AtLatestAvailable" or current.object.status.state == "AtLatestKnown" or current.object.status.state == "UpgradePending" then
+        hs.status = "Healthy"
+        hs.message = "Subscription state: " .. current.object.status.state
+      elseif current.object.status.state == "PendingInstall" or current.object.status.state == "PendingUpgrade" then
+        hs.status = "Progressing"
+        hs.message = "Subscription state: " .. current.object.status.state
+      else
+        hs.status = "Degraded"
+        hs.message = "Subscription state: " .. (current.object.status.state or "Unknown")
+      end
+      return hs
