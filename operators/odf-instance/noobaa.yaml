@@ -1,0 +1,59 @@
+apiVersion: noobaa.io/v1alpha1
+kind: NooBaa
+metadata:
+  annotations:
+    MulticloudObjectGatewayProviderMode: "true"
+  labels:
+    app: noobaa
+  name: noobaa
+  namespace: openshift-storage
+spec:
+  affinity: {}
+  autoscaler:
+    autoscalerType: hpav2
+    prometheusNamespace: openshift-monitoring
+  bucketLogging: {}
+  bucketNotifications:
+    enabled: false
+  cleanupPolicy: {}
+  coreResources:
+    limits:
+      cpu: "3"
+      memory: 4Gi
+    requests:
+      cpu: "3"
+      memory: 4Gi
+  dbSpec:
+    dbMinVolumeSize: 50Gi
+    dbResources:
+      limits:
+        cpu: "3"
+        memory: 4Gi
+      requests:
+        cpu: "3"
+        memory: 4Gi
+    dbStorageClass: nfs-csidriver3
+    image: registry.redhat.io/rhel9/postgresql-16
+  endpoints:
+    maxCount: 10
+    minCount: 3
+    resources:
+      limits:
+        cpu: "3"
+        memory: 4Gi
+      requests:
+        cpu: "3"
+        memory: 4Gi
+  labels:
+    monitoring:
+      noobaa.io/managedBy: ocs-storagecluster
+  loadBalancerSourceSubnets: {}
+  pvPoolDefaultStorageClass: nfs-csidriver3
+  security:
+    kms:
+      schedule: '@weekly'
+  tolerations:
+  - effect: NoSchedule
+    key: node.ocs.openshift.io/storage
+    operator: Equal
+    value: "true"

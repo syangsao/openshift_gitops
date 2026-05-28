@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: odf-operator
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/syangsao/openshift_gitops.git'
+    targetRevision: main
+    path: operators/odf
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: openshift-storage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

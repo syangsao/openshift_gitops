@@ -10,6 +10,7 @@ This repository contains manifests, guides, and automation scripts for managing 
   - `03-install-virt-via-gitops.md` - Managing Virtualization (KubeVirt Hypershift) operator through Argo CD
   - `04-install-qnap-csi-via-gitops.md` - Deploying the QNAP CSI Driver through Argo CD
   - `05-install-nfs-csi-via-gitops.md` - Deploying the NFS CSI Driver through Argo CD
+  - `06-install-odf-via-gitops.md` - Deploying OpenShift Data Foundation (standalone MCG) through Argo CD
 - **`scripts/`** - Automation scripts
   - `check-gitops-operator.sh` - Verify the status of the GitOps operator installation
   - `install-gitops-operator.sh` - Automated GitOps operator installation with verification
@@ -22,6 +23,8 @@ This repository contains manifests, guides, and automation scripts for managing 
   - `virt-instance/` - HyperConverged custom resource for Virtualization
   - `qnap-csi/` - QNAP CSI Driver (Trident-based) manifests for NAS storage
   - `nfs-csi/` - NFS CSI Driver (upstream Kubernetes) manifests for generic NFS storage
+  - `odf/` - ODF operator (namespace, OperatorGroup, Subscription)
+  - `odf-instance/` - ODF instance resources (StorageCluster, NooBaa, BackingStores, BucketClasses, OBC)
   - `argocd-applications/` - Argo CD Application resources and RBAC bindings
 
 ## Prerequisites
