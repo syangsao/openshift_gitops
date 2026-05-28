@@ -91,14 +91,13 @@ This grants the Argo CD application controller access to:
 | `ocs-initialization.yaml` | OCSInitialization CR (empty spec — operator manages defaults) |
 | `storage-cluster.yaml` | StorageCluster in external mode with standalone MCG |
 
-### NooBaa MCG (`operators/odf-noobaa/`)
+### NooBaa Custom Resources (`operators/odf-noobaa/`)
+
+> **Note:** The ODF operator automatically creates the `noobaa-default-backing-store` and `noobaa-default-bucket-class` when the StorageCluster is deployed. ArgoCD manages only the **custom** resources below — the operator-owned defaults are left alone.
 
 | File | Description |
 |------|-------------|
-| `noobaa.yaml` | NooBaa CR with PostgreSQL 16 on NFS, 3-10 endpoints |
-| `backing-store-default.yaml` | Default PV pool backing store (50Gi on NFS) |
 | `backing-store-quay.yaml` | Dedicated backing store for Quay Enterprise |
-| `bucket-class-default.yaml` | Default bucket class → default backing store |
 | `bucket-class-quay.yaml` | Quay bucket class → quay backing store (Spread) |
 | `object-bucket-claim.yaml` | Pre-provisioned OBC for Quay (`quay-obc`) |
 
@@ -311,7 +310,7 @@ s3cmd --access-key=<KEY> --secret-key=<SECRET> \
 
 ### Adding a New Backing Store
 
-Create a new backing store manifest in `operators/odf-noobaa/`:
+Create a new backing store manifest in `operators/odf-noobaa/` (for custom backing stores beyond the operator-created default):
 
 ```yaml
 apiVersion: noobaa.io/v1alpha1
