@@ -1,0 +1,31 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: luke-networking-argocd-access
+rules:
+# NodeNetworkConfigurationPolicy (NNCP) — cluster-scoped, nmstate operator
+- apiGroups: ["nmstate.io"]
+  resources: ["nodenetworkconfigurationpolicies", "nodenetworkconfigurationenactments", "nodenetworkstates", "nmstates"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# NetworkAttachmentDefinition (NAD) — namespace-scoped (default, mtv-test)
+- apiGroups: ["k8s.cni.cncf.io"]
+  resources: ["network-attachment-definitions"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# The macvlan NAD requires the mtv-test namespace to exist
+- apiGroups: [""]
+  resources: ["namespaces"]
+  resourceNames: ["mtv-test"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: luke-networking-argocd-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: luke-networking-argocd-access
+subjects:
+- kind: ServiceAccount
+  name: openshift-gitops-argocd-application-controller
+  namespace: openshift-gitops

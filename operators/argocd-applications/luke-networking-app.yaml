@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: luke-networking
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/syangsao/openshift_arbiter.git'
+    targetRevision: main
+    # Canonical NNCP + NAD set (5 NodeNetworkConfigurationPolicies + 2 NetworkAttachmentDefinitions).
+    path: luke-network-config.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    # Cluster-scoped resources; no single namespace. The mtv-test namespace is
+    # created by the file itself (required by the macvlan NAD).
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
